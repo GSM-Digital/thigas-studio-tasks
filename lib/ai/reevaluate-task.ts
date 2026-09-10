@@ -14,6 +14,12 @@ export async function reevaluateCompletedTask(taskId: string, agencyId: string):
   if (error || !task) throw new Error("Tarefa indisponível para avaliação do Jarvis.");
   const actualDurationSeconds = task.manual_duration_seconds ?? task.tracked_seconds;
   if (!task.completion_summary) throw new Error("O relato de conclusão é obrigatório para a avaliação do Jarvis.");
+  const previousMetadata = task.classification_metadata && typeof task.classification_metadata === "object" && !Array.isArray(task.classification_metadata)
+    ? task.classification_metadata
+    : {};
+  const rawCompletionNotes = typeof previousMetadata.completion_raw_notes === "string"
+    ? previousMetadata.completion_raw_notes
+    : task.completion_summary;
   const calculatedEfficiency = calculateEfficiencyScore(
     task.base_points,
     task.estimated_duration_seconds,
@@ -22,7 +28,7 @@ export async function reevaluateCompletedTask(taskId: string, agencyId: string):
   const completion = await evaluateTaskCompletion({
     title: task.title,
     description: task.description,
-    completionSummary: task.completion_summary,
+    completionSummary: rawCompletionNotes,
     basePoints: task.base_points,
     estimatedDurationSeconds: task.estimated_duration_seconds,
     actualDurationSeconds,
@@ -31,15 +37,12 @@ export async function reevaluateCompletedTask(taskId: string, agencyId: string):
   const efficiencyAdjustment = suppressEfficiencyBonus ? 0 : calculatedEfficiency.adjustment;
   const efficiencyPercentage = suppressEfficiencyBonus ? 0 : calculatedEfficiency.percentage;
   const finalPoints = Math.max(0, task.base_points + efficiencyAdjustment + completion.adjustment);
-  const previousMetadata = task.classification_metadata && typeof task.classification_metadata === "object" && !Array.isArray(task.classification_metadata)
-    ? task.classification_metadata
-    : {};
-
   const { error: updateError } = await supabase
     .from("tasks")
     .update({
       efficiency_adjustment: efficiencyAdjustment,
       execution_adjustment: completion.adjustment,
+      completion_summary: completion.summary,
       completion_rationale: completion.rationale,
       points: finalPoints,
       classification_status: "classified",
@@ -47,6 +50,7 @@ export async function reevaluateCompletedTask(taskId: string, agencyId: string):
       classification_metadata: {
         ...previousMetadata,
         analyst: "Jarvis",
+        completion_raw_notes: rawCompletionNotes,
         completion_justification: completion.rationale,
         execution_adjustment_percentage: completion.percentage,
         efficiency_percentage: efficiencyPercentage,

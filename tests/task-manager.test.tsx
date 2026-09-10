@@ -1,20 +1,45 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { TaskManager } from "@/components/task-manager";
 import { demoClients, demoSettings, demoViewer } from "@/lib/demo-data";
 import { deadlineInputToIso, formatDeadline } from "@/lib/domain/deadline";
 import type { TaskView } from "@/lib/types";
+
+class MockSpeechRecognition {
+  static instance: MockSpeechRecognition | null = null;
+  continuous = false;
+  interimResults = false;
+  lang = "";
+  maxAlternatives = 0;
+  onstart: (() => void) | null = null;
+  onend: (() => void) | null = null;
+  onresult: ((event: { results: Array<{ 0: { transcript: string }; isFinal: boolean }> }) => void) | null = null;
+  onerror: ((event: { error: string }) => void) | null = null;
+
+  constructor() { MockSpeechRecognition.instance = this; }
+  start() { this.onstart?.(); }
+  stop() { this.onend?.(); }
+  abort() { this.onend?.(); }
+  emit(transcript: string, isFinal = true) {
+    this.onresult?.({ results: [Object.assign([{ transcript }], { 0: { transcript }, isFinal })] });
+  }
+}
 
 beforeAll(() => {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
     value: vi.fn().mockReturnValue({ matches: false }),
   });
+  window.SpeechRecognition = MockSpeechRecognition as never;
 });
 
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+});
+
+afterAll(() => {
+  delete window.SpeechRecognition;
 });
 
 describe("formulário de nova demanda", () => {
@@ -328,17 +353,59 @@ describe("fechamento assistido pelo Jarvis", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Concluir tarefa" }));
     expect(screen.getByRole("dialog", { name: "Como foi a execução?" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Concluir e avaliar" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Resumir e concluir" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Concluir tarefa" })).toBeVisible();
 
     const summary = "Havia um conflito no script externo; corrigi a ordem de carregamento e validei os leads no CRM.";
-    fireEvent.change(screen.getByLabelText("Breve relato da conclusão"), { target: { value: summary } });
-    fireEvent.click(screen.getByRole("button", { name: "Concluir e avaliar" }));
+    fireEvent.change(screen.getByLabelText("Conte livremente como foi a entrega"), { target: { value: summary } });
+    fireEvent.click(screen.getByRole("button", { name: "Resumir e concluir" }));
 
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Como foi a execução?" })).not.toBeInTheDocument());
     expect(screen.getByRole("button", { name: "Reabrir tarefa" })).toBeVisible();
     expect(screen.getByText(summary)).toBeVisible();
     expect(screen.getByText(/Jarvis: A execução seguiu o escopo esperado/)).toBeVisible();
+  });
+
+  it("transcreve o relato de entrega pelo microfone antes de o Jarvis resumir", async () => {
+    const task: TaskView = {
+      id: "task-voice-completion",
+      title: "Publicar landing page",
+      description: "Publicar e validar o formulário.",
+      completionSummary: null,
+      completionRationale: null,
+      clientId: demoClients[0]!.id,
+      clientName: demoClients[0]!.name,
+      clientColor: demoClients[0]!.color,
+      status: "open",
+      complexityLevel: 3,
+      basePoints: 25,
+      efficiencyAdjustment: 0,
+      executionAdjustment: 0,
+      points: 25,
+      estimatedDurationSeconds: 10_800,
+      dueAt: "2030-04-20T18:00:00.000Z",
+      completedAt: null,
+      activeTimerStartedAt: null,
+      trackedSeconds: 7_200,
+      manualDurationSeconds: null,
+      classificationStatus: "classified",
+    };
+
+    render(<TaskManager initialTasks={[task]} clients={demoClients} viewer={demoViewer} initialSettings={demoSettings} demoMode />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Concluir tarefa" }));
+    const microphone = screen.getByRole("button", { name: "Ditar relato da entrega" });
+    expect(microphone).toBeEnabled();
+    fireEvent.click(microphone);
+    expect(screen.getByRole("button", { name: "Parar ditado da entrega" })).toHaveAttribute("aria-pressed", "true");
+
+    const spoken = "Eu publiquei a landing page, corrigi o carregamento do formulário e validei o envio dos leads no CRM.";
+    act(() => MockSpeechRecognition.instance?.emit(spoken));
+    expect(screen.getByRole("textbox", { name: "Conte livremente como foi a entrega" })).toHaveValue(spoken);
+    expect(screen.getByRole("button", { name: "Resumir e concluir" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Parar ditado da entrega" }));
+    expect(screen.getByRole("button", { name: "Resumir e concluir" })).toBeEnabled();
   });
 
   it("permite reavaliar uma conclusão quando a avaliação anterior falhou", async () => {

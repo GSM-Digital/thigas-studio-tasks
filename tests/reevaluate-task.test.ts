@@ -43,6 +43,7 @@ describe("reavaliação final da tarefa", () => {
     updateQuery.eq.mockReturnValueOnce(updateQuery).mockResolvedValueOnce({ error: null });
     mocks.from.mockReturnValueOnce(readQuery).mockReturnValueOnce(updateQuery);
     mocks.evaluateTaskCompletion.mockResolvedValue({
+      summary: "Resolvi uma incompatibilidade externa no DNS e validei a publicação sem indisponibilidade.",
       percentage: 10,
       adjustment: 3,
       rationale: "O relato comprova a resolução de uma dependência externa relevante sem indisponibilidade.",
@@ -57,11 +58,13 @@ describe("reavaliação final da tarefa", () => {
     expect(updateQuery.update).toHaveBeenCalledWith(expect.objectContaining({
       efficiency_adjustment: 0,
       execution_adjustment: 3,
+      completion_summary: "Resolvi uma incompatibilidade externa no DNS e validei a publicação sem indisponibilidade.",
       points: 28,
       completion_rationale: "O relato comprova a resolução de uma dependência externa relevante sem indisponibilidade.",
       classification_status: "classified",
       classification_metadata: expect.objectContaining({
         justification: "Classificação original.",
+        completion_raw_notes: "Resolvi uma incompatibilidade externa no DNS e validei a publicação sem indisponibilidade.",
         execution_adjustment_percentage: 10,
         efficiency_percentage: 0,
       }),
@@ -90,6 +93,7 @@ describe("reavaliação final da tarefa", () => {
     updateQuery.eq.mockReturnValueOnce(updateQuery).mockResolvedValueOnce({ error: null });
     mocks.from.mockReturnValueOnce(readQuery).mockReturnValueOnce(updateQuery);
     mocks.evaluateTaskCompletion.mockResolvedValue({
+      summary: "Outra pessoa implementou toda a página; eu apenas conferi o link publicado.",
       percentage: -100,
       adjustment: -60,
       rationale: "O relato declara que o desenvolvedor não executou a implementação.",

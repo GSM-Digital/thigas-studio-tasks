@@ -365,9 +365,19 @@ button { color: inherit; }
 .completion-modal form { display: grid; }
 .completion-modal form > label { margin-bottom: 7px; color: var(--muted); font-size: 9px; font-weight: 650; }
 .completion-modal textarea { width: 100%; min-height: 142px; resize: vertical; padding: 13px 14px; border: 1px solid var(--line-strong); border-radius: 13px; outline: 0; color: var(--text); background: var(--surface); font-size: 11px; line-height: 1.55; }
+.completion-input-wrap { position: relative; }
+.completion-input-wrap textarea { padding-right: 58px; }
+.completion-dictation-button { position: absolute; right: 12px; bottom: 12px; width: 36px; height: 36px; display: grid; place-items: center; padding: 0; border: 1px solid var(--line); border-radius: 50%; color: var(--muted); background: color-mix(in srgb, var(--surface-2) 92%, transparent); box-shadow: 0 5px 16px rgba(0,0,0,.12); cursor: pointer; transition: color .2s, border-color .2s, background .2s, transform .2s, box-shadow .2s; }
+.completion-dictation-button:not(:disabled):hover { color: var(--blue); border-color: rgba(0,124,255,.34); transform: translateY(-1px); }
+.completion-dictation-button.listening { color: white; border-color: transparent; background: #ff453a; box-shadow: 0 0 0 6px rgba(255,69,58,.12); animation: microphone-pulse 1.35s ease-in-out infinite; }
+.completion-dictation-button:disabled { opacity: .38; cursor: default; }
+.completion-dictation-button svg { width: 15px; height: 15px; }
+.completion-speech-status { min-height: 16px; margin: 6px 3px 0; color: var(--muted-2); font-size: 8px; line-height: 1.4; }
+.completion-speech-status.listening { color: #ff453a; }
+.completion-speech-status.error { color: #ff9f0a; }
 .completion-modal textarea:focus { border-color: rgba(0,124,255,.62); box-shadow: 0 0 0 3px rgba(0,124,255,.09); }
 .completion-modal textarea::placeholder { color: var(--muted-2); }
-.completion-hint { display: flex; align-items: flex-start; gap: 7px; margin: 10px 2px 20px; color: var(--muted); font-size: 8px; line-height: 1.5; }
+.completion-hint { display: flex; align-items: flex-start; gap: 7px; margin: 7px 2px 20px; color: var(--muted); font-size: 8px; line-height: 1.5; }
 .completion-hint svg { width: 12px; height: 12px; flex: 0 0 auto; color: var(--blue); }
 .completion-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .completion-actions button { height: 38px; padding: 0 15px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); background: var(--surface-2); font-size: 9px; font-weight: 650; cursor: pointer; }

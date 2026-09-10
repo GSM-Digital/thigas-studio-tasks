@@ -11,6 +11,7 @@ import { formatDuration } from "@/lib/domain/time";
 import { getServerEnv } from "@/lib/env";
 
 const completionOutputSchema = z.object({
+  resumo_conclusao: z.string().trim().min(20).max(1_500),
   ajuste_execucao_percentual: z.union([
     z.literal(-100),
     z.literal(-80),
@@ -33,9 +34,10 @@ const completionOutputSchema = z.object({
 const completionJsonSchema = {
   type: "object",
   additionalProperties: false,
-  propertyOrdering: ["ajuste_execucao_percentual", "justificativa_ajuste"],
-  required: ["ajuste_execucao_percentual", "justificativa_ajuste"],
+  propertyOrdering: ["resumo_conclusao", "ajuste_execucao_percentual", "justificativa_ajuste"],
+  required: ["resumo_conclusao", "ajuste_execucao_percentual", "justificativa_ajuste"],
   properties: {
+    resumo_conclusao: { type: "string" },
     ajuste_execucao_percentual: {
       type: "integer",
       enum: [-100, -80, -70, -60, -50, -40, -30, -20, -10, 0, 5, 10, 15, 20],
@@ -45,6 +47,12 @@ const completionJsonSchema = {
 } as const;
 
 export const JARVIS_COMPLETION_PROMPT = `Você é Jarvis, um Gerente de Projetos de Tecnologia e Avaliador de Produtividade sênior. Compare o escopo original com o relato de conclusão e avalie autoria, qualidade, cumprimento dos requisitos e retrabalho.
+
+RESUMO DA ENTREGA
+- Transforme o relato livre do desenvolvedor em um resumo profissional, claro e conciso, em português do Brasil.
+- Preserve fatos relevantes: o que foi implementado, problemas encontrados, soluções aplicadas, participação de terceiros, pendências e validações realizadas.
+- Remova repetições, vícios de linguagem e trechos sem valor informativo, mas nunca invente ações ou resultados.
+- Escreva em primeira pessoa, em um parágrafo curto, adequado para um histórico de entrega.
 
 REGRAS DO AJUSTE DE EXECUÇÃO
 - +20%: resolução excepcional e claramente demonstrada de problema crítico, trabalho adicional substancial ou prevenção de alto risco.
@@ -76,6 +84,7 @@ export interface CompletionEvaluationInput {
 }
 
 export interface CompletionEvaluation {
+  summary: string;
   percentage: ExecutionAdjustmentPercentage;
   adjustment: number;
   rationale: string;
@@ -99,11 +108,12 @@ export async function evaluateTaskCompletion(
       `Relato de conclusão: ${input.completionSummary}`,
     ].join("\n"),
     responseJsonSchema: completionJsonSchema,
-    maxOutputTokens: 450,
+    maxOutputTokens: 700,
     timeoutMs: 12_000,
   });
   const parsed = completionOutputSchema.parse(output);
   return {
+    summary: parsed.resumo_conclusao,
     percentage: parsed.ajuste_execucao_percentual,
     adjustment: calculateExecutionAdjustment(input.basePoints, parsed.ajuste_execucao_percentual),
     rationale: parsed.justificativa_ajuste,

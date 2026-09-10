@@ -680,6 +680,12 @@ function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskVi
   const [preparingCompletion, setPreparingCompletion] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [reevaluating, setReevaluating] = useState(false);
+  const completionSpeech = useSpeechDictation({
+    value: completionInput,
+    onChange: setCompletionInput,
+    language: "pt-BR",
+    maxLength: 4_000,
+  });
   const done = task.status === "completed" || task.status === "approved";
   const running = Boolean(task.activeTimerStartedAt);
 
@@ -721,7 +727,7 @@ function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskVi
   async function completeTask(event: React.FormEvent) {
     event.preventDefault();
     const completionSummary = completionInput.trim();
-    if (completionSummary.length < 10 || completing) return;
+    if (completionSummary.length < 10 || completing || completionSpeech.listening) return;
     setCompleting(true);
     const completedAt = new Date().toISOString();
     const completed = await onMutate(
@@ -748,7 +754,16 @@ function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskVi
       { optimistic: false },
     );
     setCompleting(false);
-    if (completed) setCompletionOpen(false);
+    if (completed) {
+      completionSpeech.cancel();
+      setCompletionOpen(false);
+    }
+  }
+
+  function closeCompletion() {
+    if (completing) return;
+    completionSpeech.cancel();
+    setCompletionOpen(false);
   }
 
   async function reevaluateWithJarvis() {
@@ -952,12 +967,12 @@ function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskVi
         {!done && onRemove && <button className={`delete-task-button ${confirmingDelete ? "confirming" : ""}`} onClick={() => void deleteTask()} onBlur={() => !deleting && setConfirmingDelete(false)} disabled={running || deleting} aria-label={confirmingDelete ? `Confirmar exclusão de ${task.title}` : `Excluir ${task.title}`} title={running ? "Pare o cronômetro antes de excluir" : "Excluir tarefa"}>{deleting ? <LoaderCircle className="spin" /> : confirmingDelete ? <span>Excluir</span> : <Trash2 />}</button>}
       </div>
       {completionOpen && createPortal((
-        <div className="completion-modal-backdrop" onMouseDown={() => !completing && setCompletionOpen(false)}>
+        <div className="completion-modal-backdrop" onMouseDown={closeCompletion}>
           <section className="completion-modal" role="dialog" aria-modal="true" aria-labelledby={`completion-title-${task.id}`} onMouseDown={(event) => event.stopPropagation()}>
             <div className="completion-modal-head">
               <span><Sparkles /></span>
               <div><p>FECHAMENTO ASSISTIDO</p><h2 id={`completion-title-${task.id}`}>Como foi a execução?</h2></div>
-              <button type="button" onClick={() => setCompletionOpen(false)} disabled={completing} aria-label="Fechar relato de conclusão"><X /></button>
+              <button type="button" onClick={closeCompletion} disabled={completing} aria-label="Fechar relato de conclusão"><X /></button>
             </div>
             <p className="completion-task-title">{task.title}</p>
             <div className="completion-context">
@@ -966,22 +981,39 @@ function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskVi
               <span>{task.basePoints} pontos-base</span>
             </div>
             <form onSubmit={completeTask}>
-              <label htmlFor={`completion-summary-${task.id}`}>Breve relato da conclusão</label>
-              <textarea
-                id={`completion-summary-${task.id}`}
-                autoFocus
-                required
-                minLength={10}
-                maxLength={4000}
-                rows={6}
-                value={completionInput}
-                onChange={(event) => setCompletionInput(event.target.value)}
-                placeholder="Conte o que foi feito, quem participou, se houve problemas, pendências ou retrabalho e como a entrega foi validada..."
-              />
-              <div className="completion-hint"><Sparkles /><span>O Jarvis avaliará autoria, qualidade, escopo e retrabalho. Usar IA ou automação não reduz pontos quando você conduz, revisa e valida a entrega.</span></div>
+              <label htmlFor={`completion-summary-${task.id}`}>Conte livremente como foi a entrega</label>
+              <div className="completion-input-wrap">
+                <textarea
+                  id={`completion-summary-${task.id}`}
+                  autoFocus
+                  required
+                  minLength={10}
+                  maxLength={4000}
+                  rows={6}
+                  readOnly={completionSpeech.listening}
+                  value={completionInput}
+                  onChange={(event) => setCompletionInput(event.target.value)}
+                  placeholder="Digite ou use o microfone. Conte tudo do seu jeito: o que fez, problemas, soluções, pendências e como validou..."
+                />
+                <button
+                  type="button"
+                  className={`completion-dictation-button ${completionSpeech.listening ? "listening" : ""}`}
+                  onClick={completionSpeech.toggle}
+                  disabled={completing || !completionSpeech.supported}
+                  aria-label={completionSpeech.listening ? "Parar ditado da entrega" : "Ditar relato da entrega"}
+                  aria-pressed={completionSpeech.listening}
+                  title={completionSpeech.supported ? "Ditar relato em português" : "Ditado não disponível neste navegador"}
+                >
+                  <Mic />
+                </button>
+              </div>
+              <div className={`completion-speech-status ${completionSpeech.error ? "error" : completionSpeech.listening ? "listening" : ""}`} role={completionSpeech.error ? "alert" : "status"}>
+                {completionSpeech.error ?? (completionSpeech.listening ? "Ouvindo... fale naturalmente e toque novamente para parar." : "Você pode ditar e revisar o texto antes de concluir.")}
+              </div>
+              <div className="completion-hint"><Sparkles /><span>O Jarvis organizará seu relato em um resumo profissional e avaliará autoria, qualidade, escopo e retrabalho. Usar IA ou automação não reduz pontos quando você conduz, revisa e valida a entrega.</span></div>
               <div className="completion-actions">
-                <button type="button" onClick={() => setCompletionOpen(false)} disabled={completing}>Cancelar</button>
-                <button type="submit" disabled={completing || completionInput.trim().length < 10}>{completing ? <LoaderCircle className="spin" /> : <Sparkles />} Concluir e avaliar</button>
+                <button type="button" onClick={closeCompletion} disabled={completing}>Cancelar</button>
+                <button type="submit" disabled={completing || completionSpeech.listening || completionInput.trim().length < 10}>{completing ? <LoaderCircle className="spin" /> : <Sparkles />} {completing ? "Jarvis está resumindo..." : "Resumir e concluir"}</button>
               </div>
             </form>
           </section>
