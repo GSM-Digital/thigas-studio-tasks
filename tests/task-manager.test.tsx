@@ -455,3 +455,54 @@ describe("fechamento assistido pelo Jarvis", () => {
     );
   });
 });
+
+describe("detalhamento da pontuação na visão Agência", () => {
+  it("explica pontos-base, bônus e justificativa de cada entrega", () => {
+    const completedTask: TaskView = {
+      id: "agency-detailed-task",
+      title: "Migrar landing page institucional",
+      description: "Migrar a página e preservar o formulário.",
+      completionSummary: "Migrei a landing page, corrigi a integração externa e validei os leads no ambiente final.",
+      completionRationale: "O desenvolvedor resolveu uma incompatibilidade externa relevante e evitou a perda de leads.",
+      clientId: demoClients[0]!.id,
+      clientName: demoClients[0]!.name,
+      clientColor: demoClients[0]!.color,
+      status: "completed",
+      complexityLevel: 3,
+      basePoints: 25,
+      efficiencyAdjustment: 10,
+      executionAdjustment: 3,
+      points: 38,
+      estimatedDurationSeconds: 14_400,
+      dueAt: null,
+      completedAt: new Date().toISOString(),
+      activeTimerStartedAt: null,
+      trackedSeconds: 5_400,
+      manualDurationSeconds: null,
+      classificationStatus: "classified",
+    };
+
+    render(
+      <TaskManager
+        initialTasks={[completedTask]}
+        clients={demoClients}
+        viewer={{ ...demoViewer, role: "agency" }}
+        initialSettings={demoSettings}
+        demoMode
+      />,
+    );
+
+    const detailButton = screen.getByRole("button", { name: "Ver detalhes de Migrar landing page institucional" });
+    expect(detailButton).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(detailButton);
+
+    expect(screen.getByRole("button", { name: "Ocultar detalhes de Migrar landing page institucional" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Nível 3")).toBeVisible();
+    expect(screen.getByText("25 pontos-base atribuídos pelo Jarvis.")).toBeVisible();
+    expect(screen.getByText("+10 pontos")).toBeVisible();
+    expect(screen.getByText("+3 pontos")).toBeVisible();
+    expect(screen.getByText("25 + 10 + 3 = 38")).toBeVisible();
+    expect(screen.getByText(/resolveu uma incompatibilidade externa relevante/)).toBeVisible();
+    expect(screen.getByText(completedTask.completionSummary!)).toBeVisible();
+  });
+});

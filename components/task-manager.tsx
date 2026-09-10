@@ -1057,12 +1057,107 @@ function AgencyView({ tasks, settings, demoMode, onMutateTask }: { tasks: TaskVi
             <div className="client-report-head"><strong>{client.clientName}</strong><span>{client.totalPoints} pts · {formatCurrency(client.totalAmountCents)}</span></div>
             {client.tasks.map((item) => {
               const source = tasks.find((task) => task.id === item.id)!;
-              return <div className="report-line" key={item.id}><span className={`approval-dot ${source.status === "approved" ? "approved" : ""}`}><Check /></span><div><strong>{item.title}</strong><span>{new Date(item.completedAt).toLocaleDateString("pt-BR")} · {formatDuration(item.durationSeconds)}</span></div><em>{item.points} pts</em><b>{formatCurrency(item.amountCents)}</b>{source.status === "approved" ? <span className="approved-label">Aprovada</span> : <button className="approve-button" onClick={() => void onMutateTask(source.id, async () => (await requestJson<{ task: TaskView }>(`/api/tasks/${source.id}/approval`, { method: "POST" })).task, (task) => ({ ...task, status: "approved" }))}>{demoMode ? "Aprovar" : "Aprovar"}</button>}</div>;
+              return <AgencyTaskReportRow key={item.id} item={item} source={source} settings={settings} demoMode={demoMode} onMutateTask={onMutateTask} />;
             })}
           </div>
         ))}
         {report.clients.length === 0 && <EmptyState label="Nenhuma tarefa concluída neste ciclo." />}
       </section>
+    </div>
+  );
+}
+
+type AgencyReportItem = ReturnType<typeof generateBillingReport>["clients"][number]["tasks"][number];
+
+function pointsLabel(value: number): string {
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${value} ${Math.abs(value) === 1 ? "ponto" : "pontos"}`;
+}
+
+function timeAdjustmentExplanation(task: TaskView, actualDurationSeconds: number): string {
+  if (task.estimatedDurationSeconds <= 0) return "SLA indisponível para comparar a eficiência de tempo.";
+  const usagePercentage = Math.round((actualDurationSeconds / task.estimatedDurationSeconds) * 100);
+  const comparison = `Tempo real de ${formatDuration(actualDurationSeconds)}, equivalente a ${usagePercentage}% do SLA de ${formatDuration(task.estimatedDurationSeconds)}.`;
+  if (task.efficiencyAdjustment > 0) return `${comparison} O prazo foi significativamente antecipado e gerou ${pointsLabel(task.efficiencyAdjustment)}.`;
+  if (task.efficiencyAdjustment < 0) return `${comparison} O SLA foi ultrapassado e gerou ${pointsLabel(task.efficiencyAdjustment)}.`;
+  return `${comparison} A execução ficou na faixa esperada, sem ajuste de tempo.`;
+}
+
+function executionAdjustmentExplanation(task: TaskView): string {
+  if (task.completionRationale) return task.completionRationale;
+  if (task.classificationStatus === "pending") return "A avaliação da entrega ainda está pendente no Jarvis.";
+  if (task.classificationStatus === "failed") return "O Jarvis não conseguiu concluir a avaliação desta entrega.";
+  return task.executionAdjustment === 0
+    ? "O Jarvis não identificou evidências para bônus ou penalidade de execução."
+    : "A justificativa detalhada do ajuste não está disponível.";
+}
+
+function AgencyTaskReportRow({
+  item,
+  source,
+  settings,
+  demoMode,
+  onMutateTask,
+}: {
+  item: AgencyReportItem;
+  source: TaskView;
+  settings: WorkspaceSettings;
+  demoMode: boolean;
+  onMutateTask: TaskMutator;
+}) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const hasPositiveBonus = source.efficiencyAdjustment > 0 || source.executionAdjustment > 0;
+  const hasPenalty = source.efficiencyAdjustment < 0 || source.executionAdjustment < 0;
+
+  return (
+    <div className={`agency-task-report ${detailsOpen ? "details-open" : ""}`}>
+      <div className="report-line">
+        <span className={`approval-dot ${source.status === "approved" ? "approved" : ""}`}><Check /></span>
+        <div><strong>{item.title}</strong><span>{new Date(item.completedAt).toLocaleDateString("pt-BR")} · {formatDuration(item.durationSeconds)}</span></div>
+        <em>{item.points} pts</em>
+        <b>{formatCurrency(item.amountCents)}</b>
+        {source.status === "approved"
+          ? <span className="approved-label">Aprovada</span>
+          : <button className="approve-button" onClick={() => void onMutateTask(source.id, async () => (await requestJson<{ task: TaskView }>(`/api/tasks/${source.id}/approval`, { method: "POST" })).task, (task) => ({ ...task, status: "approved" }))}>{demoMode ? "Aprovar" : "Aprovar"}</button>}
+        <button
+          type="button"
+          className="report-detail-toggle"
+          onClick={() => setDetailsOpen((current) => !current)}
+          aria-expanded={detailsOpen}
+          aria-label={`${detailsOpen ? "Ocultar" : "Ver"} detalhes de ${item.title}`}
+        ><span>Detalhes</span><ChevronDown /></button>
+      </div>
+      <div className="report-task-details" hidden={!detailsOpen}>
+        <div className="report-score-grid">
+          <div className="report-score-step">
+            <span>Complexidade</span>
+            <strong>Nível {source.complexityLevel}</strong>
+            <p>{source.basePoints} pontos-base atribuídos pelo Jarvis.</p>
+          </div>
+          <div className={`report-score-step ${source.efficiencyAdjustment > 0 ? "positive" : source.efficiencyAdjustment < 0 ? "negative" : ""}`}>
+            <span>Ajuste de tempo</span>
+            <strong>{pointsLabel(source.efficiencyAdjustment)}</strong>
+            <p>{timeAdjustmentExplanation(source, item.durationSeconds)}</p>
+          </div>
+          <div className={`report-score-step ${source.executionAdjustment > 0 ? "positive" : source.executionAdjustment < 0 ? "negative" : ""}`}>
+            <span>Avaliação da entrega</span>
+            <strong>{pointsLabel(source.executionAdjustment)}</strong>
+            <p>{executionAdjustmentExplanation(source)}</p>
+          </div>
+          <div className="report-score-total">
+            <span>Pontuação final</span>
+            <strong>{source.points} pts</strong>
+            <p>{source.basePoints} {source.efficiencyAdjustment >= 0 ? "+" : "−"} {Math.abs(source.efficiencyAdjustment)} {source.executionAdjustment >= 0 ? "+" : "−"} {Math.abs(source.executionAdjustment)} = {source.points}</p>
+            <small>{hasPenalty ? "A entrega recebeu penalidade." : hasPositiveBonus ? "A entrega recebeu bônus." : "Sem bônus ou penalidades."} · {formatCurrency(source.points * settings.pointValueCents)}</small>
+          </div>
+        </div>
+        {source.completionSummary && (
+          <div className="report-completion-summary">
+            <Sparkles />
+            <div><span>Resumo da entrega</span><p>{source.completionSummary}</p></div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
