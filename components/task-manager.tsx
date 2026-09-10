@@ -42,7 +42,7 @@ import {
   toDateTimeLocalValue,
 } from "@/lib/domain/deadline";
 import { calculateAmountCents, calculateEfficiencyScore, formatCurrency } from "@/lib/domain/points";
-import { sortTasksByUrgency } from "@/lib/domain/priority";
+import { groupTasksByDeadline } from "@/lib/domain/task-groups";
 import { effectiveDuration, formatDuration, parseDuration } from "@/lib/domain/time";
 import { generateBillingReport, reportToCsv } from "@/lib/reports/generate";
 import { useSpeechDictation } from "@/lib/browser/use-speech-dictation";
@@ -548,14 +548,13 @@ function DeveloperView({
   const [clientId, setClientId] = useState("");
   const [estimatedHours, setEstimatedHours] = useState("");
   const [dueAt, setDueAt] = useState("");
-  const [currentDate, setCurrentDate] = useState<Date | null>(null);
+  const [currentDate] = useState(() => new Date());
   const [adding, setAdding] = useState(false);
   const timezone = settings.timezone ?? "America/Sao_Paulo";
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       const now = new Date();
-      setCurrentDate(now);
       setDueAt((current) => current || createDefaultDeadline(now));
     }, 0);
     return () => window.clearTimeout(timeout);
@@ -563,9 +562,8 @@ function DeveloperView({
   const hasInvalidEstimate = estimatedHours.trim() !== "" && (
     !Number.isFinite(Number(estimatedHours)) || Number(estimatedHours) <= 0
   );
-  const openTasks = sortTasksByUrgency(
-    tasks.filter((task) => task.status !== "completed" && task.status !== "approved"),
-  );
+  const openTasks = tasks.filter((task) => task.status !== "completed" && task.status !== "approved");
+  const openTaskGroups = groupTasksByDeadline(openTasks, currentDate, timezone);
   const completedTasks = tasks.filter((task) => task.status === "completed" || task.status === "approved");
   const todayCompleted = currentDate
     ? allTasks.filter((task) => task.completedAt && dateKeyAtTimeZone(task.completedAt, timezone) === dateKeyAtTimeZone(currentDate, timezone)).length
@@ -664,10 +662,23 @@ function DeveloperView({
       </form>
 
       <div className="list-toolbar"><span>{openTasks.length} pendentes</span><button><SlidersHorizontal /> Filtrar</button></div>
-      <div className="task-list">
-        {openTasks.map((task) => <TaskRow key={task.id} task={task} clients={clients} settings={settings} onMutate={onMutateTask} onRemove={onRemoveTask} />)}
-        {openTasks.length === 0 && <EmptyState />}
-      </div>
+      {openTaskGroups.length > 0 ? (
+        <div className="task-date-groups">
+          {openTaskGroups.map((group) => (
+            <section className={`task-date-group ${group.kind}`} key={group.id} aria-labelledby={`task-date-${group.id}`}>
+              <div className="task-date-heading">
+                <h2 id={`task-date-${group.id}`}>{group.label}</h2>
+                <span>{group.tasks.length} {group.tasks.length === 1 ? "demanda" : "demandas"}</span>
+              </div>
+              <div className="task-list">
+                {group.tasks.map((task) => <TaskRow key={task.id} task={task} clients={clients} settings={settings} onMutate={onMutateTask} onRemove={onRemoveTask} />)}
+              </div>
+            </section>
+          ))}
+        </div>
+      ) : (
+        <div className="task-list"><EmptyState /></div>
+      )}
 
       {completedTasks.length > 0 && (
         <details className="completed-group" open>

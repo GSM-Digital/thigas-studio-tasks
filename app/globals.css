@@ -140,6 +140,13 @@ button { color: inherit; }
 .list-toolbar > span { color: var(--muted); font-size: max(var(--font-min), 10px); font-weight: 650; text-transform: uppercase; letter-spacing: .9px; }
 .list-toolbar button { display: flex; align-items: center; gap: 5px; border: 0; background: transparent; color: var(--muted); font-size: max(var(--font-min), 10px); cursor: pointer; }
 .list-toolbar svg { width: 12px; }
+.task-date-groups { display: grid; gap: 30px; }
+.task-date-group { min-width: 0; }
+.task-date-heading { min-height: 38px; display: flex; align-items: end; justify-content: space-between; gap: 16px; margin: 0 4px 9px; padding-bottom: 7px; border-bottom: 1px solid var(--line); }
+.task-date-heading h2 { margin: 0; color: var(--text); font-size: 22px; font-weight: 650; letter-spacing: -.035em; line-height: 1.1; }
+.task-date-heading > span { flex: 0 0 auto; color: var(--muted); font-size: var(--font-min); line-height: 1.2; }
+.task-date-group.today .task-date-heading h2 { color: var(--blue); }
+.task-date-group.overdue .task-date-heading h2 { color: #ff453a; }
 .task-list { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; box-shadow: 0 8px 34px rgba(25, 35, 50, .035); }
 .task-row { min-height: 86px; display: grid; grid-template-columns: 28px minmax(220px, 1fr) 105px 215px; align-items: center; gap: 13px; padding: 15px 17px; }
 .task-row + .task-row { border-top: 1px solid var(--line); }
@@ -509,7 +516,7 @@ button { color: inherit; }
 }
 @media (max-width: 600px) {
   :root { --font-min: 13px; }
-  .topbar { gap: 12px; }.mobile-brand strong { display: none; }.search-box { flex: 1; width: auto; }.jarvis-trigger { width: 35px; padding: 0; justify-content: center; }.jarvis-trigger span { display: none; }.page-heading { align-items: start; }.day-score { display: none; }.quick-add { grid-template-columns: auto minmax(0, 1fr) 76px; }.quick-add-copy { grid-column: 2 / 4; }.client-select-wrap { grid-column: 2; }.estimate-input-wrap { grid-column: 3; }.deadline-input-wrap { grid-column: 2 / 4; }.deadline-input-wrap input { width: 100%; }.add-button { grid-column: 2 / 4; height: 39px; justify-content: center; }.task-row { grid-template-columns: 25px minmax(0, 1fr); gap: 10px; padding: 16px; }.timer-control { grid-column: 2; justify-self: start; }.metric-grid { grid-template-columns: 1fr; }.report-heading { align-items: flex-start; gap: 18px; }.report-actions { flex-direction: column; }.report-line { grid-template-columns: 19px minmax(0, 1fr) 66px 34px; }.report-line > em, .report-line > b { display: none; }.report-detail-toggle { width: 34px; padding: 0; }.report-detail-toggle span { display: none; }.report-task-details { margin-left: 8px; padding: 10px; }.report-score-grid { grid-template-columns: 1fr; }.login-card { padding: 32px; }
+  .topbar { gap: 12px; }.mobile-brand strong { display: none; }.search-box { flex: 1; width: auto; }.jarvis-trigger { width: 35px; padding: 0; justify-content: center; }.jarvis-trigger span { display: none; }.page-heading { align-items: start; }.day-score { display: none; }.quick-add { grid-template-columns: auto minmax(0, 1fr) 76px; }.quick-add-copy { grid-column: 2 / 4; }.client-select-wrap { grid-column: 2; }.estimate-input-wrap { grid-column: 3; }.deadline-input-wrap { grid-column: 2 / 4; }.deadline-input-wrap input { width: 100%; }.add-button { grid-column: 2 / 4; height: 39px; justify-content: center; }.task-date-groups { gap: 25px; }.task-date-heading { margin-inline: 2px; }.task-date-heading h2 { font-size: 20px; }.task-date-heading > span { display: none; }.task-row { grid-template-columns: 25px minmax(0, 1fr); gap: 10px; padding: 16px; }.timer-control { grid-column: 2; justify-self: start; }.metric-grid { grid-template-columns: 1fr; }.report-heading { align-items: flex-start; gap: 18px; }.report-actions { flex-direction: column; }.report-line { grid-template-columns: 19px minmax(0, 1fr) 66px 34px; }.report-line > em, .report-line > b { display: none; }.report-detail-toggle { width: 34px; padding: 0; }.report-detail-toggle span { display: none; }.report-task-details { margin-left: 8px; padding: 10px; }.report-score-grid { grid-template-columns: 1fr; }.login-card { padding: 32px; }
 }
 
 @media (max-width: 520px) {
