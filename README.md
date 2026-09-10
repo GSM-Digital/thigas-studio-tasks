@@ -122,7 +122,7 @@ O Jarvis usa saída JSON estruturada do Gemini, validação com Zod, timeout de 
 
 O chat usa `POST /api/jarvis/chat`. A conversa recente é enviada sem a chave da API sair do servidor. Quando os quatro dados obrigatórios — tarefa, cliente existente, estimativa de execução e data/hora de entrega — estão completos, o servidor valida a saída estruturada, grava a tarefa no Supabase e devolve o card pronto para a lista. Clientes inventados, prazos no passado e pontuações fora da faixa são recusados antes da persistência.
 
-As faixas são: nível 1 = 1–4, nível 2 = 5–15, nível 3 = 20–35 e nível 4 = 50–100 pontos base. O bônus varia de +20% a +40%; atrasos recebem penalidade de -20% a -50%. A chave do Gemini nunca é enviada ao navegador. O modelo padrão `gemini-3.8-flash` equilibra capacidade e custo; altere `GEMINI_CLASSIFICATION_MODEL` sem mudança de código.
+As faixas são: nível 1 = 1–4, nível 2 = 5–15, nível 3 = 20–35 e nível 4 = 50–100 pontos base. O bônus varia de +20% a +40%; atrasos recebem penalidade de -20% a -50%. A chave do Gemini nunca é enviada ao navegador. O modelo estável `gemini-2.5-flash` foi escolhido pelo equilíbrio entre qualidade, baixa latência e custo; altere `GEMINI_CLASSIFICATION_MODEL` sem mudança de código.
 
 ## 5. Gerador de relatórios
 
@@ -177,7 +177,7 @@ Abra `http://localhost:3000`.
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | navegador | chave publicável, protegida por RLS |
 | `SUPABASE_SECRET_KEY` | servidor | execução manual do fechamento; nunca use `NEXT_PUBLIC_` |
 | `GEMINI_API_KEY` | servidor | avaliação automática pelo Jarvis; nunca use `NEXT_PUBLIC_` |
-| `GEMINI_CLASSIFICATION_MODEL` | servidor | padrão `gemini-3.8-flash` |
+| `GEMINI_CLASSIFICATION_MODEL` | servidor | padrão `gemini-2.5-flash` |
 | `CRON_SECRET` | servidor | bearer token de no mínimo 32 caracteres |
 | `NEXT_PUBLIC_DEMO_MODE` | navegador | `true` somente para demonstração local |
 

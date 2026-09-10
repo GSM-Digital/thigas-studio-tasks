@@ -24,6 +24,12 @@ function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
+function thinkingConfigFor(model: string) {
+  return model.startsWith("gemini-2.5-")
+    ? { thinkingBudget: 0 }
+    : { thinkingLevel: ThinkingLevel.LOW };
+}
+
 export function createGeminiStructuredClient(): StructuredGenerationClient {
   const env = getServerEnv();
   if (!env.GEMINI_API_KEY) throw new Error("GEMINI_API_KEY não configurada.");
@@ -43,7 +49,7 @@ export function createGeminiStructuredClient(): StructuredGenerationClient {
               maxOutputTokens: input.maxOutputTokens ?? 700,
               responseMimeType: "application/json",
               responseJsonSchema: input.responseJsonSchema,
-              thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+              thinkingConfig: thinkingConfigFor(input.model),
               httpOptions: { timeout: input.timeoutMs ?? 15_000 },
             },
           });

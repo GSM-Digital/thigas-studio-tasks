@@ -27,7 +27,7 @@ describe("cliente estruturado do Gemini", () => {
     const client = createGeminiStructuredClient();
 
     await expect(client.generateStructured({
-      model: "gemini-3.8-flash",
+      model: "gemini-2.5-flash",
       systemInstruction: "Responda somente JSON.",
       prompt: "Configurar GA4",
       responseJsonSchema: {
@@ -37,11 +37,12 @@ describe("cliente estruturado do Gemini", () => {
     })).resolves.toEqual({ nivel_complexidade: 2 });
 
     expect(mocks.generateContent).toHaveBeenCalledWith(expect.objectContaining({
-      model: "gemini-3.8-flash",
+      model: "gemini-2.5-flash",
       contents: "Configurar GA4",
       config: expect.objectContaining({
         responseMimeType: "application/json",
         temperature: 0,
+        thinkingConfig: { thinkingBudget: 0 },
       }),
     }));
   });
@@ -51,7 +52,7 @@ describe("cliente estruturado do Gemini", () => {
     const client = createGeminiStructuredClient();
 
     await expect(client.generateStructured({
-      model: "gemini-3.8-flash",
+      model: "gemini-2.5-flash",
       systemInstruction: "Responda somente JSON.",
       prompt: "Teste",
       responseJsonSchema: { type: "object" },

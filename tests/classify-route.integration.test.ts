@@ -23,7 +23,7 @@ describe("POST /api/classify", () => {
   beforeEach(() => mocks.classifyTask.mockReset());
 
   it("valida, classifica e responde com o contrato público", async () => {
-    mocks.classifyTask.mockResolvedValue({ complexityLevel: 3, basePoints: 25, efficiencyAdjustment: 8, finalPoints: 33, rationale: "Implementação com integrações entregue com eficiência.", model: "gemini-3.8-flash" });
+    mocks.classifyTask.mockResolvedValue({ complexityLevel: 3, basePoints: 25, efficiencyAdjustment: 8, finalPoints: 33, rationale: "Implementação com integrações entregue com eficiência.", model: "gemini-2.5-flash" });
     const response = await POST(new Request("http://localhost/api/classify", {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ tarefa: "Criar nova landing page", prazo_estimado_segundos: 28800, tempo_real_gasto_segundos: 8000 }),
     }));

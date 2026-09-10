@@ -5,7 +5,7 @@ const serverSchema = z.object({
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: z.string().min(10),
   SUPABASE_SECRET_KEY: z.string().min(10).optional(),
   GEMINI_API_KEY: z.string().min(20).optional(),
-  GEMINI_CLASSIFICATION_MODEL: z.string().min(1).default("gemini-3.8-flash"),
+  GEMINI_CLASSIFICATION_MODEL: z.string().min(1).default("gemini-2.5-flash"),
   CRON_SECRET: z.string().min(32).optional(),
 });
 
