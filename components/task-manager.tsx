@@ -18,6 +18,7 @@ import {
   Play,
   Plus,
   Search,
+  Send,
   Settings,
   SlidersHorizontal,
   Sparkles,
@@ -27,7 +28,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createDefaultDeadline,
   deadlineInputToIso,
@@ -55,6 +56,12 @@ interface TaskManagerProps {
 }
 
 type ViewMode = "developer" | "agency";
+
+interface JarvisUiMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+}
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -90,6 +97,7 @@ export function TaskManager({
   const [search, setSearch] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [clientsOpen, setClientsOpen] = useState(false);
+  const [jarvisOpen, setJarvisOpen] = useState(false);
   const [dark, setDark] = useState<boolean | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -203,7 +211,7 @@ export function TaskManager({
         </nav>
 
         <div className="sidebar-section">
-          <div className="sidebar-section-head"><p>CLIENTES</p>{viewer.role === "developer" && <button className="clients-manage-trigger" onClick={() => { setClientsOpen(true); setSettingsOpen(false); }} aria-label="Gerenciar clientes"><Plus /></button>}</div>
+          <div className="sidebar-section-head"><p>CLIENTES</p>{viewer.role === "developer" && <button className="clients-manage-trigger" onClick={() => { setClientsOpen(true); setSettingsOpen(false); setJarvisOpen(false); }} aria-label="Gerenciar clientes"><Plus /></button>}</div>
           <button className={selectedClient === "all" ? "client-active" : ""} onClick={() => setSelectedClient("all")}>
             <span className="client-dot all"><BriefcaseBusiness /></span> Todos
             <em>{tasks.length}</em>
@@ -218,8 +226,8 @@ export function TaskManager({
 
         <div className="sidebar-footer">
           {demoMode && <span className="demo-pill">Modo demonstração</span>}
-          {viewer.role === "developer" && <button onClick={() => { setClientsOpen(true); setSettingsOpen(false); }}><Users /> Gerenciar clientes</button>}
-          <button onClick={() => { setSettingsOpen(true); setClientsOpen(false); }}><Settings /> Ajustes</button>
+          {viewer.role === "developer" && <button onClick={() => { setClientsOpen(true); setSettingsOpen(false); setJarvisOpen(false); }}><Users /> Gerenciar clientes</button>}
+          <button onClick={() => { setSettingsOpen(true); setClientsOpen(false); setJarvisOpen(false); }}><Settings /> Ajustes</button>
           <div className="profile-row">
             <span className="avatar">{viewer.name.slice(0, 2).toUpperCase()}</span>
             <div><strong>{viewer.name}</strong><span>{roleLabel(viewer.role)}</span></div>
@@ -233,9 +241,10 @@ export function TaskManager({
           <div className="mobile-brand"><div className="brand-mark small">T</div><strong>Thigas</strong></div>
           <div className="search-box"><Search /><input aria-label="Buscar tarefas" placeholder="Buscar tarefas..." value={search} onChange={(event) => setSearch(event.target.value)} /></div>
           <div className="top-actions">
+            {viewer.role === "developer" && !demoMode && <button className="jarvis-trigger" onClick={() => { setJarvisOpen(true); setSettingsOpen(false); setClientsOpen(false); }}><Sparkles /><span>Jarvis</span></button>}
             <button className="icon-button theme-control" onClick={() => setDark((value) => !(value ?? false))} aria-label="Alternar tema">{dark ? <><Sun /><span>Light</span></> : <><Moon /><span>Dark</span></>}</button>
-            {viewer.role === "developer" && <button className="icon-button mobile-clients" onClick={() => { setClientsOpen(true); setSettingsOpen(false); }} aria-label="Gerenciar clientes"><Users /></button>}
-            <button className="icon-button mobile-settings" onClick={() => { setSettingsOpen(true); setClientsOpen(false); }} aria-label="Abrir ajustes"><Settings /></button>
+            {viewer.role === "developer" && <button className="icon-button mobile-clients" onClick={() => { setClientsOpen(true); setSettingsOpen(false); setJarvisOpen(false); }} aria-label="Gerenciar clientes"><Users /></button>}
+            <button className="icon-button mobile-settings" onClick={() => { setSettingsOpen(true); setClientsOpen(false); setJarvisOpen(false); }} aria-label="Abrir ajustes"><Settings /></button>
           </div>
         </header>
 
@@ -285,8 +294,127 @@ export function TaskManager({
           onNotice={showNotice}
         />
       )}
+      {viewer.role === "developer" && !demoMode && (
+        <JarvisPanel
+          open={jarvisOpen}
+          onClose={() => setJarvisOpen(false)}
+          onTaskCreated={(task) => {
+            setTasks((current) => [task, ...current]);
+            showNotice("Demanda adicionada pelo Jarvis.");
+          }}
+        />
+      )}
       {notice && <div className="toast" role="status">{notice}</div>}
     </main>
+  );
+}
+
+function JarvisPanel({
+  open,
+  onClose,
+  onTaskCreated,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onTaskCreated: (task: TaskView) => void;
+}) {
+  const [messages, setMessages] = useState<JarvisUiMessage[]>([
+    {
+      id: "welcome",
+      role: "assistant",
+      content: "Olá! Conte a demanda, o cliente, a estimativa e o prazo de entrega. Se faltar algo, eu pergunto.",
+    },
+  ]);
+  const [input, setInput] = useState("");
+  const [sending, setSending] = useState(false);
+  const messagesEnd = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    messagesEnd.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages, sending]);
+
+  async function sendMessage(event: React.FormEvent) {
+    event.preventDefault();
+    const content = input.trim();
+    if (!content || sending) return;
+
+    const userMessage: JarvisUiMessage = {
+      id: crypto.randomUUID(),
+      role: "user",
+      content,
+    };
+    const nextMessages = [...messages, userMessage];
+    setMessages(nextMessages);
+    setInput("");
+    setSending(true);
+
+    try {
+      const result = await requestJson<{ message: string; task: TaskView | null }>(
+        "/api/jarvis/chat",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            messages: nextMessages.slice(-12).map(({ role, content: text }) => ({ role, content: text })),
+          }),
+        },
+      );
+      setMessages((current) => [
+        ...current,
+        { id: crypto.randomUUID(), role: "assistant", content: result.message },
+      ]);
+      if (result.task) onTaskCreated(result.task);
+    } catch (error) {
+      setMessages((current) => [
+        ...current,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: error instanceof Error ? error.message : "Não consegui processar a mensagem. Tente novamente.",
+        },
+      ]);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  if (!open) return null;
+
+  return (
+    <div className="drawer-backdrop" onMouseDown={onClose}>
+      <aside className="jarvis-drawer" onMouseDown={(event) => event.stopPropagation()} aria-label="Conversa com Jarvis">
+        <div className="jarvis-head">
+          <div className="jarvis-identity"><span><Sparkles /></span><div><strong>Jarvis</strong><small>Analista de demandas</small></div></div>
+          <button onClick={onClose} aria-label="Fechar Jarvis"><X /></button>
+        </div>
+        <div className="jarvis-messages" aria-live="polite">
+          {messages.map((message) => (
+            <div className={`jarvis-message ${message.role}`} key={message.id}>
+              {message.role === "assistant" && <span className="jarvis-avatar"><Sparkles /></span>}
+              <p>{message.content}</p>
+            </div>
+          ))}
+          {sending && <div className="jarvis-message assistant"><span className="jarvis-avatar"><Sparkles /></span><p className="jarvis-thinking"><i /><i /><i /></p></div>}
+          <div ref={messagesEnd} />
+        </div>
+        <form className="jarvis-composer" onSubmit={sendMessage}>
+          <textarea
+            aria-label="Mensagem para o Jarvis"
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                event.currentTarget.form?.requestSubmit();
+              }
+            }}
+            placeholder="Ex.: Jarvis, crie uma demanda de GA4 para a Make One..."
+            maxLength={800}
+            rows={3}
+          />
+          <div><span>Enter para enviar · Shift + Enter para quebrar linha</span><button type="submit" disabled={sending || !input.trim()} aria-label="Enviar mensagem">{sending ? <LoaderCircle className="spin" /> : <Send />}</button></div>
+        </form>
+      </aside>
+    </div>
   );
 }
 

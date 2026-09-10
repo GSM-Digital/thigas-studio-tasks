@@ -8,6 +8,7 @@ Sistema full-stack para tarefas, tempo e faturamento de agências. Construído c
 app/
 ├── api/
 │   ├── classify/route.ts             # avaliação isolada pelo Jarvis
+│   ├── jarvis/chat/route.ts           # conversa que coleta e cria demandas
 │   ├── clients/                       # criar, editar e arquivar clientes
 │   ├── cron/billing/route.ts          # disparo protegido/observabilidade do fechamento
 │   ├── reports/route.ts               # relatório JSON ou CSV
@@ -29,6 +30,7 @@ components/
 └── task-manager.tsx                    # UI principal e as duas visões
 lib/
 ├── ai/classifier.ts                    # prompt/Structured Output do Jarvis
+├── ai/jarvis-chat.ts                   # interpretação conversacional validada
 ├── ai/reevaluate-task.ts               # reavaliação ao concluir/corrigir tempo
 ├── domain/{points,time}.ts             # regras puras de domínio
 ├── reports/generate.ts                 # agrupamento e totalização
@@ -82,6 +84,7 @@ select cron.schedule(
 - **Desenvolvedor:** cria, conclui/reabre, inicia/para, corrige o tempo e exclui tarefas em aberto com confirmação.
 - **Clientes:** o botão `+` ao lado de CLIENTES — ou “Gerenciar clientes” — abre o cadastro para adicionar, renomear, trocar a cor ou remover clientes.
 - **Agência:** consulta o ciclo, totalizações e entregas por cliente; a única mutação disponível é aprovar uma entrega concluída.
+- **Jarvis:** o botão no cabeçalho abre um chat que transforma uma solicitação em tarefa. Se cliente, estimativa ou data/hora estiverem ausentes, ele pede somente os dados faltantes.
 - **PDF:** o botão “Salvar PDF” aplica uma folha de impressão dedicada e abre o diálogo nativo do navegador.
 - **Tabela:** exportação CSV UTF-8 com separador compatível com Excel pt-BR.
 
@@ -117,6 +120,8 @@ Resposta:
 
 O Jarvis usa Structured Outputs com Zod, timeout de 12 s e duas tentativas de rede. O modelo define nível/pontos base e redige a justificativa; o servidor recalcula o fator de eficiência deterministicamente, impedindo divergências financeiras. Sem tempo real, a pontuação inicial é igual aos pontos base. Ao concluir a tarefa — ou corrigir o tempo de uma tarefa concluída — o Jarvis reavalia o resultado.
 
+O chat usa `POST /api/jarvis/chat`. A conversa recente é enviada sem a chave da API sair do servidor. Quando os quatro dados obrigatórios — tarefa, cliente existente, estimativa de execução e data/hora de entrega — estão completos, o servidor valida a saída estruturada, grava a tarefa no Supabase e devolve o card pronto para a lista. Clientes inventados, prazos no passado e pontuações fora da faixa são recusados antes da persistência.
+
 As faixas são: nível 1 = 1–4, nível 2 = 5–15, nível 3 = 20–35 e nível 4 = 50–100 pontos base. O bônus varia de +20% a +40%; atrasos recebem penalidade de -20% a -50%. A chave da OpenAI nunca é enviada ao navegador. O modelo padrão `gpt-5.4-nano` prioriza boa capacidade de classificação com baixo consumo; altere `OPENAI_CLASSIFICATION_MODEL` sem mudança de código.
 
 ## 5. Gerador de relatórios
@@ -134,7 +139,7 @@ npm run lint
 npm run build
 ```
 
-Os testes cobrem faixas de pontos, todas as bandas de eficiência, aritmética monetária, parse/edição de tempo, timer ativo, Structured Outputs, normalização da resposta do Jarvis, inconsistência nível/pontos, contrato HTTP em português, limite de período, agrupamento e CSV.
+Os testes cobrem faixas de pontos, todas as bandas de eficiência, aritmética monetária, parse/edição de tempo, timer ativo, Structured Outputs, conversa do Jarvis, recusa de cliente inventado, criação de tarefa pelo chat, contrato HTTP em português, limite de período, agrupamento e CSV.
 
 Para validar o schema localmente, tenha Docker ativo e execute:
 
