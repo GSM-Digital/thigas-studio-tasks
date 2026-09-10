@@ -7,6 +7,7 @@ import {
   ChevronDown,
   CircleDollarSign,
   Clock3,
+  Copy,
   Download,
   LayoutDashboard,
   ListTodo,
@@ -45,6 +46,7 @@ import { sortTasksByUrgency } from "@/lib/domain/priority";
 import { effectiveDuration, formatDuration, parseDuration } from "@/lib/domain/time";
 import { generateBillingReport, reportToCsv } from "@/lib/reports/generate";
 import { useSpeechDictation } from "@/lib/browser/use-speech-dictation";
+import { formatAiErrorLog, readAiErrorDiagnostic, type AiErrorDiagnostic } from "@/lib/ai/error-diagnostics";
 import type {
   AppRole,
   ClientSummary,
@@ -97,13 +99,24 @@ function useTimerFavicon(hasRunningTimer: boolean) {
   }, [hasRunningTimer]);
 }
 
+class ApiRequestError extends Error {
+  constructor(message: string, public readonly diagnostic: AiErrorDiagnostic | null = null) {
+    super(message);
+  }
+}
+
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     ...init,
     headers: { "content-type": "application/json", ...init?.headers },
   });
-  const body = (await response.json()) as T & { error?: { message?: string } };
-  if (!response.ok) throw new Error(body.error?.message ?? "Não foi possível concluir a ação.");
+  const body = (await response.json()) as T & { error?: { message?: string; details?: { diagnostic?: unknown } } };
+  if (!response.ok) {
+    throw new ApiRequestError(
+      body.error?.message ?? "Não foi possível concluir a ação.",
+      readAiErrorDiagnostic(body.error?.details?.diagnostic),
+    );
+  }
   return body;
 }
 
@@ -192,7 +205,12 @@ export function TaskManager({
       return true;
     } catch (error) {
       if (optimistic) setTasks(previous);
-      showNotice(error instanceof Error ? error.message : "Ação não concluída.");
+      if (error instanceof ApiRequestError && error.diagnostic) {
+        setTasks((current) => current.map((task) => task.id === id
+          ? { ...task, classificationStatus: "failed", classificationError: error.diagnostic }
+          : task));
+      }
+      showNotice(error instanceof ApiRequestError && error.diagnostic ? error.diagnostic.title : error instanceof Error ? error.message : "Ação não concluída.");
       return false;
     }
   }
@@ -680,6 +698,7 @@ function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskVi
   const [preparingCompletion, setPreparingCompletion] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [reevaluating, setReevaluating] = useState(false);
+  const [diagnosticCopied, setDiagnosticCopied] = useState(false);
   const completionSpeech = useSpeechDictation({
     value: completionInput,
     onChange: setCompletionInput,
@@ -777,11 +796,31 @@ function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskVi
       (current) => ({
         ...current,
         classificationStatus: "classified",
+        classificationError: null,
         completionRationale: "O Jarvis concluiu a reavaliação no modo de demonstração.",
       }),
       { optimistic: false },
     );
     setReevaluating(false);
+  }
+
+  async function copyJarvisDiagnostic() {
+    if (!task.classificationError) return;
+    const log = formatAiErrorLog(task.classificationError);
+    try {
+      await navigator.clipboard.writeText(log);
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = log;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.append(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      textarea.remove();
+    }
+    setDiagnosticCopied(true);
+    window.setTimeout(() => setDiagnosticCopied(false), 2_000);
   }
 
   function toggleTimer() {
@@ -901,12 +940,23 @@ function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskVi
                     {reevaluating
                       ? "O Jarvis está reavaliando esta entrega..."
                       : task.classificationStatus === "failed"
-                        ? "A avaliação do Jarvis não foi concluída."
+                        ? task.classificationError?.title ?? "A avaliação do Jarvis não foi concluída."
                         : "A avaliação do Jarvis está pendente."}
                   </small>
                   <button type="button" onClick={() => void reevaluateWithJarvis()} disabled={reevaluating}>
                     {reevaluating ? <LoaderCircle className="spin" /> : <RefreshCw />}
                     {reevaluating ? "Reavaliando..." : "Reavaliar com Jarvis"}
+                  </button>
+                </div>
+              )}
+              {task.classificationStatus === "failed" && task.classificationError && !reevaluating && (
+                <div className={`jarvis-error-diagnostic category-${task.classificationError.category}`}>
+                  <strong>{task.classificationError.title}</strong>
+                  <p>{task.classificationError.message}</p>
+                  <code>{task.classificationError.provider} · HTTP {task.classificationError.status ?? "N/D"} · {task.classificationError.code} · {task.classificationError.referenceId}</code>
+                  <button type="button" onClick={() => void copyJarvisDiagnostic()} aria-label="Copiar diagnóstico do Jarvis">
+                    {diagnosticCopied ? <Check /> : <Copy />}
+                    {diagnosticCopied ? "Copiado" : "Copiar diagnóstico"}
                   </button>
                 </div>
               )}

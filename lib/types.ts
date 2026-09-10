@@ -1,3 +1,5 @@
+import type { AiErrorDiagnostic } from "@/lib/ai/error-diagnostics";
+
 export type AppRole = "developer" | "agency";
 export type TaskStatus = "open" | "in_progress" | "completed" | "approved";
 export type ClassificationStatus = "pending" | "classified" | "failed" | "manual";
@@ -30,6 +32,7 @@ export interface TaskView {
   trackedSeconds: number;
   manualDurationSeconds: number | null;
   classificationStatus: ClassificationStatus;
+  classificationError?: AiErrorDiagnostic | null;
 }
 
 export interface Viewer {

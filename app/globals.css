@@ -168,6 +168,15 @@ button { color: inherit; }
 .completion-evaluation-retry button { min-height: 25px; display: inline-flex; align-items: center; gap: 5px; padding: 0 9px; border: 1px solid rgba(0,124,255,.2); border-radius: 999px; color: var(--blue); background: color-mix(in srgb, var(--blue-soft) 72%, var(--surface)); font-size: max(var(--font-min), 8px); font-weight: 650; cursor: pointer; }
 .completion-evaluation-retry button:disabled { cursor: default; opacity: .62; }
 .completion-evaluation-retry button svg { width: 10px; height: 10px; }
+.jarvis-error-diagnostic { display: grid; gap: 7px; margin-top: 10px; padding: 12px; border: 1px solid rgba(255,159,10,.24); border-radius: 10px; background: rgba(255,159,10,.07); }
+.completion-report .jarvis-error-diagnostic > strong { color: #ff9f0a; font-size: var(--font-min); letter-spacing: 0; text-transform: none; }
+.completion-report .jarvis-error-diagnostic > p { margin: 0; color: var(--text); font-size: var(--font-min); line-height: 1.5; }
+.jarvis-error-diagnostic code { display: block; padding: 8px 9px; overflow-wrap: anywhere; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); background: color-mix(in srgb, var(--bg) 60%, transparent); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--font-min); line-height: 1.45; user-select: all; }
+.jarvis-error-diagnostic > button { width: fit-content; min-height: 34px; display: inline-flex; align-items: center; gap: 7px; padding: 0 11px; border: 1px solid rgba(255,159,10,.26); border-radius: 999px; color: #ff9f0a; background: rgba(255,159,10,.08); font-size: var(--font-min); font-weight: 680; cursor: pointer; transition: border-color .18s ease, background .18s ease, transform .18s ease; }
+.jarvis-error-diagnostic > button:hover, .jarvis-error-diagnostic > button:focus-visible { border-color: rgba(255,159,10,.5); background: rgba(255,159,10,.14); transform: translateY(-1px); outline: 0; }
+.jarvis-error-diagnostic > button svg { width: 14px; height: 14px; }
+.jarvis-error-diagnostic.category-authentication, .jarvis-error-diagnostic.category-configuration { border-color: rgba(255,69,58,.25); background: rgba(255,69,58,.07); }
+.completion-report .jarvis-error-diagnostic.category-authentication > strong, .completion-report .jarvis-error-diagnostic.category-configuration > strong { color: #ff453a; }
 .task-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: max(var(--font-min), 11px); line-height: 1.25; }
 .client-tag { display: flex; align-items: center; gap: 5px; padding: 0; border: 0; background: transparent; color: var(--muted); font: inherit; cursor: pointer; }
 .client-tag:disabled { cursor: default; }

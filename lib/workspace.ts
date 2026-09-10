@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import type { ClientSummary, TaskView, Viewer, WorkspaceSettings } from "@/lib/types";
+import { readAiErrorDiagnostic } from "@/lib/ai/error-diagnostics";
 
 export async function loadWorkspace(viewer: Viewer): Promise<{
   clients: ClientSummary[];
@@ -21,7 +22,7 @@ export async function loadWorkspace(viewer: Viewer): Promise<{
     supabase
       .from("tasks")
       .select(
-        "id, title, description, completion_summary, completion_rationale, client_id, status, complexity_level, base_points, efficiency_adjustment, execution_adjustment, points, estimated_duration_seconds, due_at, completed_at, tracked_seconds, manual_duration_seconds, classification_status, created_at",
+        "id, title, description, completion_summary, completion_rationale, client_id, status, complexity_level, base_points, efficiency_adjustment, execution_adjustment, points, estimated_duration_seconds, due_at, completed_at, tracked_seconds, manual_duration_seconds, classification_status, classification_metadata, created_at",
       )
       .eq("agency_id", viewer.agencyId)
       .order("created_at", { ascending: false })
@@ -75,6 +76,11 @@ export async function loadWorkspace(viewer: Viewer): Promise<{
       trackedSeconds: task.tracked_seconds,
       manualDurationSeconds: task.manual_duration_seconds,
       classificationStatus: task.classification_status,
+      classificationError: readAiErrorDiagnostic(
+        task.classification_metadata && typeof task.classification_metadata === "object" && !Array.isArray(task.classification_metadata)
+          ? task.classification_metadata.last_evaluation_error
+          : null,
+      ),
     };
   });
 

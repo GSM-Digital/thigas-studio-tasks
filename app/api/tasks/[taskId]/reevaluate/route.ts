@@ -4,6 +4,8 @@ import { requireDeveloper, requireViewer } from "@/lib/auth";
 import { ApiError, jsonError } from "@/lib/http";
 import { createClient } from "@/lib/supabase/server";
 import { getTaskView } from "@/lib/task-view";
+import { createAiErrorDiagnostic } from "@/lib/ai/error-diagnostics";
+import { logAiError, persistTaskEvaluationFailure } from "@/lib/ai/task-evaluation-error";
 
 const paramsSchema = z.object({ taskId: z.uuid() });
 
@@ -42,16 +44,14 @@ export async function POST(_request: Request, context: { params: Promise<{ taskI
     try {
       await reevaluateCompletedTask(taskId, viewer.agencyId);
     } catch (evaluationError) {
-      console.error("Jarvis task reevaluation failed", evaluationError);
-      await supabase
-        .from("tasks")
-        .update({ classification_status: "failed" })
-        .eq("id", taskId)
-        .eq("agency_id", viewer.agencyId);
+      const diagnostic = createAiErrorDiagnostic(evaluationError);
+      logAiError("Jarvis task reevaluation failed", diagnostic);
+      await persistTaskEvaluationFailure(taskId, viewer.agencyId, diagnostic);
       throw new ApiError(
-        503,
-        "JARVIS_REEVALUATION_FAILED",
-        "O Jarvis não conseguiu concluir a avaliação. Aguarde alguns instantes e tente novamente.",
+        diagnostic.category === "quota_exhausted" ? 429 : 503,
+        diagnostic.code,
+        diagnostic.message,
+        { diagnostic },
       );
     }
 

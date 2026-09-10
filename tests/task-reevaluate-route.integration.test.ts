@@ -5,6 +5,8 @@ const mocks = vi.hoisted(() => ({
   from: vi.fn(),
   getTaskView: vi.fn(),
   reevaluateCompletedTask: vi.fn(),
+  persistTaskEvaluationFailure: vi.fn(),
+  logAiError: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -21,6 +23,10 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 vi.mock("@/lib/task-view", () => ({ getTaskView: mocks.getTaskView }));
 vi.mock("@/lib/ai/reevaluate-task", () => ({ reevaluateCompletedTask: mocks.reevaluateCompletedTask }));
+vi.mock("@/lib/ai/task-evaluation-error", () => ({
+  persistTaskEvaluationFailure: mocks.persistTaskEvaluationFailure,
+  logAiError: mocks.logAiError,
+}));
 
 import { POST } from "@/app/api/tasks/[taskId]/reevaluate/route";
 
@@ -49,6 +55,8 @@ describe("POST /api/tasks/[taskId]/reevaluate", () => {
     mocks.from.mockReset();
     mocks.getTaskView.mockReset();
     mocks.reevaluateCompletedTask.mockReset();
+    mocks.persistTaskEvaluationFailure.mockReset();
+    mocks.logAiError.mockReset();
   });
 
   it("reavalia uma tarefa concluída usando o relato salvo", async () => {
@@ -71,8 +79,7 @@ describe("POST /api/tasks/[taskId]/reevaluate", () => {
   it("restaura o status de falha quando o provedor não responde", async () => {
     const read = readQuery();
     const pending = updateQuery();
-    const failed = updateQuery();
-    mocks.from.mockReturnValueOnce(read).mockReturnValueOnce(pending).mockReturnValueOnce(failed);
+    mocks.from.mockReturnValueOnce(read).mockReturnValueOnce(pending);
     mocks.reevaluateCompletedTask.mockRejectedValue(new Error("DEADLINE_EXCEEDED"));
 
     const response = await POST(new Request(`http://localhost/api/tasks/${taskId}/reevaluate`, { method: "POST" }), {
@@ -80,9 +87,39 @@ describe("POST /api/tasks/[taskId]/reevaluate", () => {
     });
 
     expect(response.status).toBe(503);
-    expect(failed.update).toHaveBeenCalledWith({ classification_status: "failed" });
+    expect(mocks.persistTaskEvaluationFailure).toHaveBeenCalledWith(
+      taskId,
+      "22222222-2222-4222-8222-222222222222",
+      expect.objectContaining({ category: "timeout", code: "DEADLINE_EXCEEDED" }),
+    );
     await expect(response.json()).resolves.toMatchObject({
-      error: { code: "JARVIS_REEVALUATION_FAILED" },
+      error: {
+        code: "DEADLINE_EXCEEDED",
+        details: { diagnostic: { category: "timeout", status: null } },
+      },
+    });
+  });
+
+  it("informa separadamente quando a cota da API terminou", async () => {
+    const read = readQuery();
+    const pending = updateQuery();
+    mocks.from.mockReturnValueOnce(read).mockReturnValueOnce(pending);
+    mocks.reevaluateCompletedTask.mockRejectedValue(Object.assign(
+      new Error('{"error":{"code":429,"status":"RESOURCE_EXHAUSTED","message":"Daily quota exceeded"}}'),
+      { status: 429 },
+    ));
+
+    const response = await POST(new Request(`http://localhost/api/tasks/${taskId}/reevaluate`, { method: "POST" }), {
+      params: Promise.resolve({ taskId }),
+    });
+
+    expect(response.status).toBe(429);
+    await expect(response.json()).resolves.toMatchObject({
+      error: {
+        code: "RESOURCE_EXHAUSTED",
+        message: expect.stringContaining("cota disponível foi consumida"),
+        details: { diagnostic: { category: "quota_exhausted", status: 429 } },
+      },
     });
   });
 });

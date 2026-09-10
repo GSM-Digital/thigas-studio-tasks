@@ -50,6 +50,7 @@ export async function reevaluateCompletedTask(taskId: string, agencyId: string):
       classification_metadata: {
         ...previousMetadata,
         analyst: "Jarvis",
+        last_evaluation_error: null,
         completion_raw_notes: rawCompletionNotes,
         completion_justification: completion.rationale,
         execution_adjustment_percentage: completion.percentage,

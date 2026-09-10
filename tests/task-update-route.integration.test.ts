@@ -5,6 +5,8 @@ const mocks = vi.hoisted(() => ({
   from: vi.fn(),
   getTaskView: vi.fn(),
   reevaluateCompletedTask: vi.fn(),
+  persistTaskEvaluationFailure: vi.fn(),
+  logAiError: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -21,6 +23,10 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 vi.mock("@/lib/task-view", () => ({ getTaskView: mocks.getTaskView }));
 vi.mock("@/lib/ai/reevaluate-task", () => ({ reevaluateCompletedTask: mocks.reevaluateCompletedTask }));
+vi.mock("@/lib/ai/task-evaluation-error", () => ({
+  persistTaskEvaluationFailure: mocks.persistTaskEvaluationFailure,
+  logAiError: mocks.logAiError,
+}));
 
 import { PATCH } from "@/app/api/tasks/[taskId]/route";
 
@@ -31,6 +37,8 @@ describe("PATCH /api/tasks/[taskId]", () => {
     mocks.from.mockReset();
     mocks.getTaskView.mockReset();
     mocks.reevaluateCompletedTask.mockReset();
+    mocks.persistTaskEvaluationFailure.mockReset();
+    mocks.logAiError.mockReset();
   });
 
   it("persiste a descrição opcional sem alterar o status", async () => {
@@ -157,5 +165,37 @@ describe("PATCH /api/tasks/[taskId]", () => {
     }));
     expect(mocks.reevaluateCompletedTask).toHaveBeenCalledWith(taskId, "22222222-2222-4222-8222-222222222222");
     await expect(response.json()).resolves.toMatchObject({ task: { completionSummary, executionAdjustment: 2 } });
+  });
+
+  it("preserva a conclusão e registra o diagnóstico quando a IA falha", async () => {
+    const completionSummary = "Concluí a implementação e validei o resultado no ambiente final.";
+    const timerQuery = { select: vi.fn(), eq: vi.fn(), is: vi.fn(), maybeSingle: vi.fn() };
+    timerQuery.select.mockReturnValue(timerQuery);
+    timerQuery.eq.mockReturnValue(timerQuery);
+    timerQuery.is.mockReturnValue(timerQuery);
+    timerQuery.maybeSingle.mockResolvedValue({ data: null, error: null });
+    const taskQuery = { update: vi.fn(), eq: vi.fn() };
+    taskQuery.update.mockReturnValue(taskQuery);
+    taskQuery.eq.mockReturnValueOnce(taskQuery).mockResolvedValueOnce({ error: null });
+    mocks.from.mockImplementation((table: string) => table === "time_entries" ? timerQuery : taskQuery);
+    mocks.reevaluateCompletedTask.mockRejectedValue(Object.assign(
+      new Error('{"error":{"code":429,"status":"RESOURCE_EXHAUSTED","message":"Daily quota exceeded"}}'),
+      { status: 429 },
+    ));
+    mocks.getTaskView.mockResolvedValue({ id: taskId, status: "completed", classificationStatus: "failed" });
+
+    const response = await PATCH(new Request(`http://localhost/api/tasks/${taskId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ completed: true, completionSummary }),
+    }), { params: Promise.resolve({ taskId }) });
+
+    expect(response.status).toBe(200);
+    expect(mocks.persistTaskEvaluationFailure).toHaveBeenCalledWith(
+      taskId,
+      "22222222-2222-4222-8222-222222222222",
+      expect.objectContaining({ category: "quota_exhausted", status: 429 }),
+    );
+    await expect(response.json()).resolves.toMatchObject({ task: { status: "completed", classificationStatus: "failed" } });
   });
 });

@@ -5,6 +5,8 @@ import { ApiError, jsonError, parseJson } from "@/lib/http";
 import { createClient } from "@/lib/supabase/server";
 import { getTaskView } from "@/lib/task-view";
 import { reevaluateCompletedTask } from "@/lib/ai/reevaluate-task";
+import { createAiErrorDiagnostic } from "@/lib/ai/error-diagnostics";
+import { logAiError, persistTaskEvaluationFailure } from "@/lib/ai/task-evaluation-error";
 
 const updateSchema = z.object({
   completed: z.boolean().optional(),
@@ -94,12 +96,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ taskI
       try {
         await reevaluateCompletedTask(taskId, viewer.agencyId);
       } catch (evaluationError) {
-        console.error("Jarvis task evaluation failed", evaluationError);
-        await supabase
-          .from("tasks")
-          .update({ classification_status: "failed" })
-          .eq("id", taskId)
-          .eq("agency_id", viewer.agencyId);
+        const diagnostic = createAiErrorDiagnostic(evaluationError);
+        logAiError("Jarvis task evaluation failed", diagnostic);
+        await persistTaskEvaluationFailure(taskId, viewer.agencyId, diagnostic);
       }
     }
     return Response.json({ task: await getTaskView(taskId) });

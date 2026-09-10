@@ -435,10 +435,22 @@ describe("fechamento assistido pelo Jarvis", () => {
       trackedSeconds: 1721,
       manualDurationSeconds: null,
       classificationStatus: "failed",
+      classificationError: {
+        referenceId: "JRV-AB12CD34",
+        provider: "Gemini",
+        category: "quota_exhausted",
+        status: 429,
+        code: "RESOURCE_EXHAUSTED",
+        title: "Cota ou créditos da API esgotados",
+        message: "O Gemini informou que a cota disponível foi consumida.",
+        technicalDetail: "ApiError: Daily quota exceeded",
+        occurredAt: "2026-09-10T19:30:00.000Z",
+      },
     };
     const evaluatedTask: TaskView = {
       ...failedTask,
       classificationStatus: "classified",
+      classificationError: null,
       completionRationale: "A entrega foi concluída e validada, sem evidência de esforço adicional.",
     };
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(
@@ -447,6 +459,13 @@ describe("fechamento assistido pelo Jarvis", () => {
     ));
 
     render(<TaskManager initialTasks={[failedTask]} clients={demoClients} viewer={demoViewer} initialSettings={demoSettings} />);
+
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    expect(screen.getAllByText("Cota ou créditos da API esgotados")).not.toHaveLength(0);
+    expect(screen.getByText(/HTTP 429 · RESOURCE_EXHAUSTED · JRV-AB12CD34/)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Copiar diagnóstico do Jarvis" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining("Referência: JRV-AB12CD34")));
 
     fireEvent.click(screen.getByRole("button", { name: "Reavaliar com Jarvis" }));
 
@@ -457,6 +476,53 @@ describe("fechamento assistido pelo Jarvis", () => {
       "/api/tasks/failed-evaluation/reevaluate",
       expect.objectContaining({ method: "POST" }),
     );
+  });
+
+  it("exibe o diagnóstico devolvido pela API quando a reavaliação falha", async () => {
+    const failedTask: TaskView = {
+      id: "failed-without-diagnostic",
+      title: "Configurar eventos do GA4",
+      description: null,
+      completionSummary: "Configurei os eventos e validei o envio no ambiente final.",
+      completionRationale: null,
+      clientId: demoClients[0]!.id,
+      clientName: demoClients[0]!.name,
+      clientColor: demoClients[0]!.color,
+      status: "completed",
+      complexityLevel: 2,
+      basePoints: 10,
+      efficiencyAdjustment: 0,
+      executionAdjustment: 0,
+      points: 10,
+      estimatedDurationSeconds: 5400,
+      dueAt: null,
+      completedAt: "2030-04-18T14:30:00.000Z",
+      activeTimerStartedAt: null,
+      trackedSeconds: 5400,
+      manualDurationSeconds: null,
+      classificationStatus: "failed",
+      classificationError: null,
+    };
+    const diagnostic = {
+      referenceId: "JRV-EF56GH78",
+      provider: "Gemini",
+      category: "quota_exhausted",
+      status: 429,
+      code: "RESOURCE_EXHAUSTED",
+      title: "Cota ou créditos da API esgotados",
+      message: "O Gemini informou que a cota disponível foi consumida.",
+      technicalDetail: "ApiError: Daily quota exceeded",
+      occurredAt: "2026-09-10T19:30:00.000Z",
+    };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      error: { code: diagnostic.code, message: diagnostic.message, details: { diagnostic } },
+    }), { status: 429, headers: { "content-type": "application/json" } }));
+
+    render(<TaskManager initialTasks={[failedTask]} clients={demoClients} viewer={demoViewer} initialSettings={demoSettings} />);
+    fireEvent.click(screen.getByRole("button", { name: "Reavaliar com Jarvis" }));
+
+    expect(await screen.findByText(/HTTP 429 · RESOURCE_EXHAUSTED · JRV-EF56GH78/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Copiar diagnóstico do Jarvis" })).toBeVisible();
   });
 });
 

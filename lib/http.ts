@@ -6,6 +6,7 @@ export class ApiError extends Error {
     public readonly status: number,
     public readonly code: string,
     message: string,
+    public readonly details?: unknown,
   ) {
     super(message);
   }
@@ -14,7 +15,7 @@ export class ApiError extends Error {
 export function jsonError(error: unknown): NextResponse {
   if (error instanceof ApiError) {
     return NextResponse.json(
-      { error: { code: error.code, message: error.message } },
+      { error: { code: error.code, message: error.message, ...(error.details === undefined ? {} : { details: error.details }) } },
       { status: error.status },
     );
   }

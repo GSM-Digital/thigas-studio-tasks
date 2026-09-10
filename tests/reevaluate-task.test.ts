@@ -64,6 +64,7 @@ describe("reavaliação final da tarefa", () => {
       classification_status: "classified",
       classification_metadata: expect.objectContaining({
         justification: "Classificação original.",
+        last_evaluation_error: null,
         completion_raw_notes: "Resolvi uma incompatibilidade externa no DNS e validei a publicação sem indisponibilidade.",
         execution_adjustment_percentage: 10,
         efficiency_percentage: 0,

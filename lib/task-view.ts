@@ -1,12 +1,13 @@
 import { ApiError } from "@/lib/http";
 import { createClient } from "@/lib/supabase/server";
 import type { TaskView } from "@/lib/types";
+import { readAiErrorDiagnostic } from "@/lib/ai/error-diagnostics";
 
 export async function getTaskView(taskId: string): Promise<TaskView> {
   const supabase = await createClient();
   const { data: task, error } = await supabase
     .from("tasks")
-    .select("id, title, description, completion_summary, completion_rationale, client_id, status, complexity_level, base_points, efficiency_adjustment, execution_adjustment, points, estimated_duration_seconds, due_at, completed_at, tracked_seconds, manual_duration_seconds, classification_status")
+    .select("id, title, description, completion_summary, completion_rationale, client_id, status, complexity_level, base_points, efficiency_adjustment, execution_adjustment, points, estimated_duration_seconds, due_at, completed_at, tracked_seconds, manual_duration_seconds, classification_status, classification_metadata")
     .eq("id", taskId)
     .single();
   if (error || !task) throw new ApiError(404, "TASK_NOT_FOUND", "Tarefa não encontrada.");
@@ -43,5 +44,10 @@ export async function getTaskView(taskId: string): Promise<TaskView> {
     trackedSeconds: task.tracked_seconds,
     manualDurationSeconds: task.manual_duration_seconds,
     classificationStatus: task.classification_status,
+    classificationError: readAiErrorDiagnostic(
+      task.classification_metadata && typeof task.classification_metadata === "object" && !Array.isArray(task.classification_metadata)
+        ? task.classification_metadata.last_evaluation_error
+        : null,
+    ),
   };
 }
