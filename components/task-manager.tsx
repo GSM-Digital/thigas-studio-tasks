@@ -880,8 +880,8 @@ function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskVi
         {editingDescription ? (
           <form className="task-description-editor" onSubmit={saveDescription}>
             <textarea autoFocus value={descriptionInput} onChange={(event) => setDescriptionInput(event.target.value)} maxLength={4000} rows={2} aria-label={`Descrição de ${task.title}`} />
-            <button aria-label="Salvar descrição"><Check /></button>
-            <button type="button" aria-label="Cancelar edição da descrição" onClick={() => { setDescriptionInput(task.description ?? ""); setEditingDescription(false); }}><X /></button>
+            <button className="inline-edit-action confirm" aria-label="Salvar descrição"><Check /></button>
+            <button className="inline-edit-action cancel" type="button" aria-label="Cancelar edição da descrição" onClick={() => { setDescriptionInput(task.description ?? ""); setEditingDescription(false); }}><X /></button>
           </form>
         ) : (
           <button className={`task-description ${task.description ? "has-description" : ""}`} onClick={() => setEditingDescription(true)} title="Editar descrição e observações">
@@ -921,8 +921,8 @@ function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskVi
                 {clients.map((client) => <option value={client.id} key={client.id}>{client.name}</option>)}
               </select>
               <ChevronDown />
-              <button aria-label="Salvar cliente" disabled={!clients.some((client) => client.id === clientIdInput)}><Check /></button>
-              <button type="button" aria-label="Cancelar edição do cliente" onClick={() => { setClientIdInput(task.clientId); setEditingClient(false); }}><X /></button>
+              <button className="inline-edit-action confirm" aria-label="Salvar cliente" disabled={!clients.some((client) => client.id === clientIdInput)}><Check /></button>
+              <button className="inline-edit-action cancel" type="button" aria-label="Cancelar edição do cliente" onClick={() => { setClientIdInput(task.clientId); setEditingClient(false); }}><X /></button>
             </form>
           ) : (
             <button
@@ -942,8 +942,8 @@ function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskVi
             <form className="due-editor" onSubmit={saveDueAt}>
               <CalendarClock />
               <input autoFocus aria-label={`Novo prazo de ${task.title}`} type="datetime-local" required min={toDateTimeLocalValue(new Date())} value={dueAtInput} onChange={(event) => setDueAtInput(event.target.value)} />
-              <button aria-label="Salvar prazo" disabled={!isFutureDeadline(dueAtInput)}><Check /></button>
-              <button type="button" aria-label="Cancelar edição do prazo" onClick={() => setEditingDueAt(false)}><X /></button>
+              <button className="inline-edit-action confirm" aria-label="Salvar prazo" disabled={!isFutureDeadline(dueAtInput)}><Check /></button>
+              <button className="inline-edit-action cancel" type="button" aria-label="Cancelar edição do prazo" onClick={() => setEditingDueAt(false)}><X /></button>
             </form>
           ) : task.dueAt ? (
             <button
@@ -959,7 +959,7 @@ function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskVi
       <div className="task-value"><span>{done ? formatCurrency(calculateAmountCents(task.points, settings.pointValueCents)) : "Estimado"}</span><strong>{task.points} × {formatCurrency(settings.pointValueCents)}</strong></div>
       <div className="timer-control">
         {editingTime ? (
-          <form onSubmit={saveTime} className="time-editor"><input autoFocus value={timeInput} pattern="\d{1,4}:[0-5]\d:[0-5]\d" onChange={(event) => setTimeInput(event.target.value)} /><button aria-label="Salvar tempo"><Check /></button><button type="button" aria-label="Cancelar" onClick={() => setEditingTime(false)}><X /></button></form>
+          <form onSubmit={saveTime} className="time-editor"><input autoFocus value={timeInput} pattern="\d{1,4}:[0-5]\d:[0-5]\d" onChange={(event) => setTimeInput(event.target.value)} /><button className="inline-edit-action confirm" aria-label="Salvar tempo"><Check /></button><button className="inline-edit-action cancel" type="button" aria-label="Cancelar edição do tempo" onClick={() => setEditingTime(false)}><X /></button></form>
         ) : (
           <button className="time-display" disabled={running} onClick={() => { setTimeInput(formatDuration(seconds)); setEditingTime(true); }} title={running ? "Pare o cronômetro antes de editar" : "Editar tempo"}><Clock3 />{formatDuration(seconds)}</button>
         )}

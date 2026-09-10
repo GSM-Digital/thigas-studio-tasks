@@ -71,6 +71,8 @@ describe("formulário de nova demanda", () => {
     expect(screen.getByText(`Prazo ${formatDeadline(deadlineInputToIso(dueAtInput))}`)).toBeVisible();
 
     fireEvent.click(screen.getByText("Revisar o formulário e documentar o resultado."));
+    expect(screen.getByRole("button", { name: "Salvar descrição" })).toHaveClass("inline-edit-action", "confirm");
+    expect(screen.getByRole("button", { name: "Cancelar edição da descrição" })).toHaveClass("inline-edit-action", "cancel");
     fireEvent.change(screen.getByRole("textbox", { name: "Descrição de Validar prazo personalizado" }), {
       target: { value: "Observação atualizada." },
     });
@@ -248,6 +250,8 @@ describe("ordenação das demandas", () => {
     render(<TaskManager initialTasks={[task]} clients={demoClients} viewer={demoViewer} initialSettings={demoSettings} demoMode />);
 
     fireEvent.click(screen.getByRole("button", { name: "Editar cliente de Trocar cliente" }));
+    expect(screen.getByRole("button", { name: "Salvar cliente" })).toHaveClass("inline-edit-action", "confirm");
+    expect(screen.getByRole("button", { name: "Cancelar edição do cliente" })).toHaveClass("inline-edit-action", "cancel");
     fireEvent.change(screen.getByRole("combobox", { name: "Novo cliente de Trocar cliente" }), {
       target: { value: demoClients[1]!.id },
     });
