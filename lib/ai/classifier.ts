@@ -6,11 +6,12 @@ import {
 import { calculateEfficiencyScore, isValidPointsForLevel } from "@/lib/domain/points";
 import { formatDuration } from "@/lib/domain/time";
 import { getServerEnv } from "@/lib/env";
-import type { TaskClassification } from "@/lib/types";
+import type { ClientSummary, TaskClassification } from "@/lib/types";
 
 export const jarvisOutputSchema = z.object({
   nivel_complexidade: z.number().int().min(1).max(4),
   pontos_base: z.number().int().min(1).max(100),
+  cliente_nome: z.string().trim().min(2).max(120).nullable(),
   prazo_estimado_segundos: z.number().int().min(900).max(1_440_000),
   bonus_ou_penalidade: z.string().regex(/^[+-]\d+$/),
   pontuacao_final: z.number().int().min(1).max(140),
@@ -21,6 +22,9 @@ export type JarvisOutput = z.infer<typeof jarvisOutputSchema>;
 
 export interface ClassificationInput {
   title: string;
+  description?: string | null;
+  clients?: ClientSummary[];
+  selectedClientId?: string | null;
   estimatedDurationSeconds?: number | null;
   actualDurationSeconds?: number | null;
 }
@@ -28,6 +32,7 @@ export interface ClassificationInput {
 export type ClassifiedTask = TaskClassification & {
   estimatedDurationSeconds: number;
   estimateSource: "user" | "jarvis";
+  clientName: string | null;
 };
 
 export const JARVIS_EVALUATION_GUIDE = `Você é Jarvis, um Gerente de Projetos de Tecnologia e Avaliador de Produtividade sênior. Sua função é calcular a pontuação final de tarefas de um Desenvolvedor Web em duas etapas: complexidade técnica e impacto (pontos base), seguida do fator de eficiência (comparação entre prazo estimado/SLA e tempo real gasto).
@@ -55,7 +60,14 @@ ESTIMATIVA DE EXECUÇÃO
 - Use incrementos de 15 minutos, com mínimo de 900 segundos e máximo de 1.440.000 segundos.
 - Não confunda o prazo estimado de execução com a data limite de entrega.
 
-Retorne APENAS um objeto JSON válido com exatamente: "nivel_complexidade", "pontos_base", "prazo_estimado_segundos", "bonus_ou_penalidade", "pontuacao_final" e "justificativa".`;
+IDENTIFICAÇÃO DO CLIENTE
+- Retorne em cliente_nome o nome do cliente explícito na tarefa, incluindo formatos como "Tarefa - Cliente".
+- Quando houver cliente selecionado, repita exatamente o nome desse cliente.
+- Quando o nome corresponder ao catálogo de clientes ativos, repita exatamente o nome do catálogo.
+- Se houver um nome explícito que ainda não exista no catálogo, preserve esse nome para que a aplicação possa cadastrá-lo.
+- Se nenhum cliente puder ser identificado sem inventar, retorne null.
+
+Retorne APENAS um objeto JSON válido com exatamente: "nivel_complexidade", "pontos_base", "cliente_nome", "prazo_estimado_segundos", "bonus_ou_penalidade", "pontuacao_final" e "justificativa".`;
 
 export type ClassifierClient = StructuredGenerationClient;
 
@@ -65,6 +77,7 @@ const jarvisOutputJsonSchema = {
   propertyOrdering: [
     "nivel_complexidade",
     "pontos_base",
+    "cliente_nome",
     "prazo_estimado_segundos",
     "bonus_ou_penalidade",
     "pontuacao_final",
@@ -73,6 +86,7 @@ const jarvisOutputJsonSchema = {
   required: [
     "nivel_complexidade",
     "pontos_base",
+    "cliente_nome",
     "prazo_estimado_segundos",
     "bonus_ou_penalidade",
     "pontuacao_final",
@@ -81,6 +95,7 @@ const jarvisOutputJsonSchema = {
   properties: {
     nivel_complexidade: { type: "integer", minimum: 1, maximum: 4 },
     pontos_base: { type: "integer", minimum: 1, maximum: 100 },
+    cliente_nome: { type: ["string", "null"] },
     prazo_estimado_segundos: { type: "integer", minimum: 900, maximum: 1_440_000 },
     bonus_ou_penalidade: { type: "string" },
     pontuacao_final: { type: "integer", minimum: 1, maximum: 140 },
@@ -95,11 +110,16 @@ export async function classifyTask(
 ): Promise<ClassifiedTask> {
   const actualDuration = input.actualDurationSeconds ?? null;
   const providedEstimate = input.estimatedDurationSeconds ?? null;
+  const selectedClient = input.clients?.find((item) => item.id === input.selectedClientId) ?? null;
+  const clientCatalog = input.clients?.map((item) => item.name) ?? [];
   const output = await client.generateStructured({
     model,
     systemInstruction: JARVIS_SYSTEM_PROMPT,
     prompt: [
       `Tarefa: ${input.title}`,
+      `Descrição/observações: ${input.description?.trim() || "não informada"}`,
+      `Cliente selecionado: ${selectedClient?.name ?? "não selecionado — identifique pelo texto da tarefa"}`,
+      `Clientes ativos: ${JSON.stringify(clientCatalog)}`,
       `Prazo Estimado: ${providedEstimate ? formatDuration(providedEstimate) : "não informado — estime o tempo médio"}`,
       `Tempo Real Gasto: ${actualDuration && actualDuration > 0 ? formatDuration(actualDuration) : "não informado"}`,
     ].join("\n"),
@@ -133,6 +153,7 @@ export async function classifyTask(
     model,
     estimatedDurationSeconds,
     estimateSource: providedEstimate ? "user" : "jarvis",
+    clientName: selectedClient?.name ?? parsed.cliente_nome,
   };
 }
 
@@ -140,6 +161,7 @@ export function toJarvisOutput(classification: ClassifiedTask): JarvisOutput {
   return {
     nivel_complexidade: classification.complexityLevel,
     pontos_base: classification.basePoints,
+    cliente_nome: classification.clientName,
     prazo_estimado_segundos: classification.estimatedDurationSeconds,
     bonus_ou_penalidade: `${classification.efficiencyAdjustment >= 0 ? "+" : ""}${classification.efficiencyAdjustment}`,
     pontuacao_final: classification.finalPoints,

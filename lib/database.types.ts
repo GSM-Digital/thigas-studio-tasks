@@ -36,6 +36,7 @@ type TaskRow = {
   assignee_id: string | null;
   created_by: string;
   title: string;
+  description: string | null;
   status: "open" | "in_progress" | "completed" | "approved";
   complexity_level: 1 | 2 | 3 | 4;
   base_points: number;

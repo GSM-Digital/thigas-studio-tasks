@@ -4,6 +4,7 @@ import {
   type JarvisChatMessage,
 } from "@/lib/ai/jarvis-chat";
 import { requireDeveloper, requireViewer } from "@/lib/auth";
+import { resolveOrCreateClient } from "@/lib/clients/resolve";
 import { ApiError, jsonError, parseJson } from "@/lib/http";
 import { createClient } from "@/lib/supabase/server";
 import { getTaskView } from "@/lib/task-view";
@@ -47,10 +48,6 @@ export async function POST(request: Request) {
       throw new ApiError(500, "CLIENTS_LOAD_FAILED", "Não foi possível carregar os clientes.");
     }
     const clients = clientsResult.data ?? [];
-    if (clients.length === 0) {
-      throw new ApiError(409, "CLIENT_REQUIRED", "Cadastre pelo menos um cliente antes de usar o Jarvis.");
-    }
-
     let decision;
     try {
       decision = await interpretJarvisConversation(
@@ -64,18 +61,26 @@ export async function POST(request: Request) {
     }
 
     if (decision.action === "ask") {
-      return Response.json({ message: decision.message, task: null });
+      return Response.json({ message: decision.message, task: null, client: null, clientCreated: false });
     }
 
     const draft = decision.task;
+    const resolvedClient = await resolveOrCreateClient({
+      supabase,
+      agencyId: viewer.agencyId,
+      clients,
+      clientId: draft.clientId,
+      clientName: draft.clientName,
+    });
     const { data: task, error } = await supabase
       .from("tasks")
       .insert({
         agency_id: viewer.agencyId,
-        client_id: draft.clientId,
+        client_id: resolvedClient.client.id,
         created_by: viewer.id,
         assignee_id: viewer.id,
         title: draft.title,
+        description: draft.description,
         status: "open",
         complexity_level: draft.classification.complexityLevel,
         base_points: draft.classification.basePoints,
@@ -89,6 +94,8 @@ export async function POST(request: Request) {
           analyst: "Jarvis",
           source: "jarvis_chat",
           justification: draft.classification.rationale,
+          estimated_duration_source: "jarvis_chat",
+          client_resolution_source: resolvedClient.created ? "jarvis_created" : "jarvis_matched",
         },
       })
       .select("id")
@@ -103,6 +110,8 @@ export async function POST(request: Request) {
     return Response.json({
       message: `Demanda adicionada: “${taskView.title}” para ${taskView.clientName}, com nível ${taskView.complexityLevel} e ${taskView.points} pontos.`,
       task: taskView,
+      client: resolvedClient.client,
+      clientCreated: resolvedClient.created,
     }, { status: 201 });
   } catch (error) {
     return jsonError(error);

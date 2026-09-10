@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   interpret: vi.fn(),
+  resolveClient: vi.fn(),
   from: vi.fn(),
   getTaskView: vi.fn(),
 }));
@@ -10,6 +11,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/ai/jarvis-chat", () => ({
   interpretJarvisConversation: mocks.interpret,
 }));
+vi.mock("@/lib/clients/resolve", () => ({ resolveOrCreateClient: mocks.resolveClient }));
 vi.mock("@/lib/auth", () => ({
   requireViewer: vi.fn().mockResolvedValue({
     id: "11111111-1111-4111-8111-111111111111",
@@ -57,6 +59,11 @@ describe("POST /api/jarvis/chat", () => {
   beforeEach(() => {
     mocks.from.mockReset();
     mocks.interpret.mockReset();
+    mocks.resolveClient.mockReset();
+    mocks.resolveClient.mockResolvedValue({
+      client: { id: "33333333-3333-4333-8333-333333333333", name: "Make One", color: "#007CFF" },
+      created: false,
+    });
     mocks.getTaskView.mockReset();
   });
 
@@ -77,7 +84,9 @@ describe("POST /api/jarvis/chat", () => {
       message: "Entendi.",
       task: {
         title: "Configurar GA4",
+        description: "Validar eventos.",
         clientId: "33333333-3333-4333-8333-333333333333",
+        clientName: "Make One",
         estimatedDurationSeconds: 7200,
         dueAt: "2030-04-18T18:00:00.000Z",
         classification: {
@@ -101,6 +110,7 @@ describe("POST /api/jarvis/chat", () => {
     expect(response.status).toBe(201);
     expect(tasks.insert).toHaveBeenCalledWith(expect.objectContaining({
       title: "Configurar GA4",
+      description: "Validar eventos.",
       points: 10,
       due_at: "2030-04-18T18:00:00.000Z",
     }));
@@ -124,6 +134,11 @@ describe("POST /api/jarvis/chat", () => {
     }));
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ message: "Qual é o prazo de entrega?", task: null });
+    await expect(response.json()).resolves.toEqual({
+      message: "Qual é o prazo de entrega?",
+      task: null,
+      client: null,
+      clientCreated: false,
+    });
   });
 });

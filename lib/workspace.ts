@@ -21,7 +21,7 @@ export async function loadWorkspace(viewer: Viewer): Promise<{
     supabase
       .from("tasks")
       .select(
-        "id, title, client_id, status, complexity_level, base_points, efficiency_adjustment, points, estimated_duration_seconds, due_at, completed_at, tracked_seconds, manual_duration_seconds, classification_status, created_at",
+        "id, title, description, client_id, status, complexity_level, base_points, efficiency_adjustment, points, estimated_duration_seconds, due_at, completed_at, tracked_seconds, manual_duration_seconds, classification_status, created_at",
       )
       .eq("agency_id", viewer.agencyId)
       .order("created_at", { ascending: false })
@@ -56,6 +56,7 @@ export async function loadWorkspace(viewer: Viewer): Promise<{
     return {
       id: task.id,
       title: task.title,
+      description: task.description,
       clientId: task.client_id,
       clientName: client?.name ?? "Cliente removido",
       clientColor: client?.color ?? "#8e8e93",

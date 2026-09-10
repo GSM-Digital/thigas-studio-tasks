@@ -131,6 +131,13 @@ export function TaskManager({
     window.setTimeout(() => setNotice(null), 3_000);
   }
 
+  function upsertResolvedClient(client: ClientSummary) {
+    setClientList((current) => {
+      const withoutCurrent = current.filter((item) => item.id !== client.id);
+      return [...withoutCurrent, client].sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+    });
+  }
+
   async function mutateTask(
     id: string,
     action: () => Promise<TaskView>,
@@ -264,6 +271,7 @@ export function TaskManager({
             onTasksChange={setTasks}
             onMutateTask={mutateTask}
             onRemoveTask={removeTask}
+            onClientResolved={upsertResolvedClient}
             onNotice={showNotice}
           />
         ) : (
@@ -299,9 +307,12 @@ export function TaskManager({
         <JarvisPanel
           open={jarvisOpen}
           onClose={() => setJarvisOpen(false)}
-          onTaskCreated={(task) => {
+          onTaskCreated={(task, client, clientCreated) => {
             setTasks((current) => [task, ...current]);
-            showNotice("Demanda adicionada pelo Jarvis.");
+            upsertResolvedClient(client);
+            showNotice(clientCreated
+              ? `Demanda adicionada e cliente ${client.name} criado pelo Jarvis.`
+              : "Demanda adicionada pelo Jarvis.");
           }}
         />
       )}
@@ -317,13 +328,13 @@ function JarvisPanel({
 }: {
   open: boolean;
   onClose: () => void;
-  onTaskCreated: (task: TaskView) => void;
+  onTaskCreated: (task: TaskView, client: ClientSummary, clientCreated: boolean) => void;
 }) {
   const [messages, setMessages] = useState<JarvisUiMessage[]>([
     {
       id: "welcome",
       role: "assistant",
-      content: "Olá! Conte a demanda, o cliente, a estimativa e o prazo de entrega. Se faltar algo, eu pergunto.",
+      content: "Olá! Conte a demanda, o cliente e o prazo de entrega. Se você não estimar o tempo, eu calculo; se o cliente não existir, eu cadastro.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -350,7 +361,7 @@ function JarvisPanel({
     setSending(true);
 
     try {
-      const result = await requestJson<{ message: string; task: TaskView | null }>(
+      const result = await requestJson<{ message: string; task: TaskView | null; client?: ClientSummary | null; clientCreated?: boolean }>(
         "/api/jarvis/chat",
         {
           method: "POST",
@@ -363,7 +374,14 @@ function JarvisPanel({
         ...current,
         { id: crypto.randomUUID(), role: "assistant", content: result.message },
       ]);
-      if (result.task) onTaskCreated(result.task);
+      if (result.task) {
+        const resolvedClient = result.client ?? {
+          id: result.task.clientId,
+          name: result.task.clientName,
+          color: result.task.clientColor,
+        };
+        onTaskCreated(result.task, resolvedClient, Boolean(result.clientCreated));
+      }
     } catch (error) {
       setMessages((current) => [
         ...current,
@@ -428,6 +446,7 @@ function DeveloperView({
   onTasksChange,
   onMutateTask,
   onRemoveTask,
+  onClientResolved,
   onNotice,
 }: {
   tasks: TaskView[];
@@ -438,10 +457,12 @@ function DeveloperView({
   onTasksChange: React.Dispatch<React.SetStateAction<TaskView[]>>;
   onMutateTask: (id: string, action: () => Promise<TaskView>, fallback: (task: TaskView) => TaskView) => Promise<void>;
   onRemoveTask: (id: string) => Promise<void>;
+  onClientResolved: (client: ClientSummary) => void;
   onNotice: (message: string) => void;
 }) {
   const [title, setTitle] = useState("");
-  const [clientId, setClientId] = useState(clients[0]?.id ?? "");
+  const [description, setDescription] = useState("");
+  const [clientId, setClientId] = useState("");
   const [estimatedHours, setEstimatedHours] = useState("");
   const [dueAt, setDueAt] = useState(createDefaultDeadline);
   const [adding, setAdding] = useState(false);
@@ -455,7 +476,7 @@ function DeveloperView({
   const todayCompleted = allTasks.filter((task) => task.completedAt?.slice(0, 10) === new Date().toISOString().slice(0, 10)).length;
   const effectiveClientId = clients.some((client) => client.id === clientId)
     ? clientId
-    : clients[0]?.id ?? "";
+    : demoMode ? clients[0]?.id ?? "" : "";
 
   async function addTask(event: React.FormEvent) {
     event.preventDefault();
@@ -465,7 +486,6 @@ function DeveloperView({
       : null;
     if (
       !cleanTitle ||
-      !effectiveClientId ||
       (estimatedDurationSeconds !== null && (!Number.isInteger(estimatedDurationSeconds) || estimatedDurationSeconds <= 0))
     ) return;
     let dueAtIso: string;
@@ -483,22 +503,35 @@ function DeveloperView({
         const demoEstimatedDurationSeconds = estimatedDurationSeconds ?? 8 * 3600;
         created = {
           id: crypto.randomUUID(), title: cleanTitle, clientId: effectiveClientId, clientName: client.name,
+          description: description.trim() || null,
           clientColor: client.color, status: "open", complexityLevel: 2,
           basePoints: 8, efficiencyAdjustment: 0, points: 8, estimatedDurationSeconds: demoEstimatedDurationSeconds,
           dueAt: dueAtIso, completedAt: null, activeTimerStartedAt: null, trackedSeconds: 0,
           manualDurationSeconds: null, classificationStatus: "classified",
         };
       } else {
-        const result = await requestJson<{ task: TaskView }>("/api/tasks", {
-          method: "POST", body: JSON.stringify({ title: cleanTitle, clientId: effectiveClientId, estimatedDurationSeconds, dueAt: dueAtIso }),
+        const result = await requestJson<{ task: TaskView; client?: ClientSummary; clientCreated?: boolean }>("/api/tasks", {
+          method: "POST", body: JSON.stringify({ title: cleanTitle, description: description.trim() || null, clientId: effectiveClientId || null, estimatedDurationSeconds, dueAt: dueAtIso }),
         });
         created = result.task;
+        const resolvedClient = result.client ?? {
+          id: created.clientId,
+          name: created.clientName,
+          color: created.clientColor,
+        };
+        onClientResolved(resolvedClient);
+        if (result.clientCreated) {
+          onNotice(`Cliente ${resolvedClient.name} criado automaticamente pelo Jarvis.`);
+        } else if (estimatedDurationSeconds === null) {
+          onNotice(`Jarvis estimou o SLA em ${formatDuration(created.estimatedDurationSeconds)}.`);
+        }
       }
       onTasksChange((current) => [created, ...current]);
-      if (estimatedDurationSeconds === null) {
+      if (demoMode && estimatedDurationSeconds === null) {
         onNotice(`Jarvis estimou o SLA em ${formatDuration(created.estimatedDurationSeconds)}.`);
       }
       setTitle("");
+      setDescription("");
       setEstimatedHours("");
       setDueAt(createDefaultDeadline());
     } catch (error) {
@@ -517,17 +550,20 @@ function DeveloperView({
 
       <form className="quick-add" onSubmit={addTask}>
         <span className="add-circle"><Plus /></span>
-        <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Adicionar nova demanda..." aria-label="Título da nova tarefa" maxLength={240} />
+        <div className="quick-add-copy">
+          <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Adicionar nova demanda..." aria-label="Título da nova tarefa" maxLength={240} />
+          <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Descrição, anotações ou observações (opcional)" aria-label="Descrição da nova tarefa" maxLength={4000} rows={1} />
+        </div>
         <div className="client-select-wrap">
-          <span style={{ background: clients.find((client) => client.id === effectiveClientId)?.color }} />
-          <select aria-label="Cliente" value={effectiveClientId} onChange={(event) => setClientId(event.target.value)}>
-            {clients.length === 0 && <option value="">Cadastre um cliente</option>}
+          <span style={{ background: clients.find((client) => client.id === effectiveClientId)?.color ?? "#8e8e93" }} />
+          <select aria-label="Cliente" value={clientId} onChange={(event) => setClientId(event.target.value)}>
+            <option value="">Jarvis identifica</option>
             {clients.map((client) => <option value={client.id} key={client.id}>{client.name}</option>)}
           </select><ChevronDown />
         </div>
         <label className="estimate-input-wrap" title="Opcional: deixe vazio para o Jarvis estimar"><Clock3 /><input aria-label="Prazo estimado em horas" type="number" min="0.25" max="99999" step="0.25" placeholder="Auto" value={estimatedHours} onChange={(event) => setEstimatedHours(event.target.value)} /><span>h</span></label>
         <label className="deadline-input-wrap" title="Data e hora limite para concluir a tarefa"><CalendarClock /><input aria-label="Data e hora do prazo" type="datetime-local" required min={toDateTimeLocalValue(new Date())} value={dueAt} onChange={(event) => setDueAt(event.target.value)} /></label>
-        <button className="add-button" type="submit" disabled={adding || !title.trim() || !effectiveClientId || hasInvalidEstimate || !isFutureDeadline(dueAt)}>{adding ? <LoaderCircle className="spin" /> : <><Sparkles /> Adicionar</>}</button>
+        <button className="add-button" type="submit" disabled={adding || !title.trim() || (demoMode && !effectiveClientId) || hasInvalidEstimate || !isFutureDeadline(dueAt)}>{adding ? <LoaderCircle className="spin" /> : <><Sparkles /> Adicionar</>}</button>
       </form>
 
       <div className="list-toolbar"><span>{openTasks.length} pendentes</span><button><SlidersHorizontal /> Filtrar</button></div>
@@ -551,6 +587,8 @@ function DeveloperView({
 function TaskRow({ task, settings, onMutate, onRemove }: { task: TaskView; settings: WorkspaceSettings; onMutate: (id: string, action: () => Promise<TaskView>, fallback: (task: TaskView) => TaskView) => Promise<void>; onRemove?: (id: string) => Promise<void> }) {
   const [editingTime, setEditingTime] = useState(false);
   const [timeInput, setTimeInput] = useState("");
+  const [editingDescription, setEditingDescription] = useState(false);
+  const [descriptionInput, setDescriptionInput] = useState(task.description ?? "");
   const [now, setNow] = useState(0);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -601,6 +639,20 @@ function TaskRow({ task, settings, onMutate, onRemove }: { task: TaskView; setti
     } catch { /* Field validity message handles the format. */ }
   }
 
+  function saveDescription(event: React.FormEvent) {
+    event.preventDefault();
+    const description = descriptionInput.trim() || null;
+    void onMutate(
+      task.id,
+      async () => (await requestJson<{ task: TaskView }>(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ description }),
+      })).task,
+      (current) => ({ ...current, description }),
+    );
+    setEditingDescription(false);
+  }
+
   async function deleteTask() {
     if (!onRemove || running) return;
     if (!confirmingDelete) {
@@ -621,6 +673,17 @@ function TaskRow({ task, settings, onMutate, onRemove }: { task: TaskView; setti
       <button className="check-button" onClick={toggleDone} aria-label={done ? "Reabrir tarefa" : "Concluir tarefa"}>{done && <Check />}</button>
       <div className="task-main">
         <h3>{task.title}</h3>
+        {editingDescription ? (
+          <form className="task-description-editor" onSubmit={saveDescription}>
+            <textarea autoFocus value={descriptionInput} onChange={(event) => setDescriptionInput(event.target.value)} maxLength={4000} rows={2} aria-label={`Descrição de ${task.title}`} />
+            <button aria-label="Salvar descrição"><Check /></button>
+            <button type="button" aria-label="Cancelar edição da descrição" onClick={() => { setDescriptionInput(task.description ?? ""); setEditingDescription(false); }}><X /></button>
+          </form>
+        ) : (
+          <button className={`task-description ${task.description ? "has-description" : ""}`} onClick={() => setEditingDescription(true)} title="Editar descrição e observações">
+            {task.description ? <span>{task.description}</span> : <span>Adicionar observação</span>}<Pencil />
+          </button>
+        )}
         <div className="task-meta"><span className="client-tag"><i style={{ background: task.clientColor }} />{task.clientName}</span><span className={`level-badge level-${task.complexityLevel}`}>Nível {task.complexityLevel}</span><span className="points">{task.points} pts</span>{task.efficiencyAdjustment !== 0 && <span className={`efficiency-badge ${task.efficiencyAdjustment > 0 ? "positive" : "negative"}`}>{task.efficiencyAdjustment > 0 ? "+" : ""}{task.efficiencyAdjustment}</span>}<span className="sla-label">SLA {formatDuration(task.estimatedDurationSeconds)}</span>{task.dueAt && <span className={`due-label ${!done && new Date(task.dueAt).getTime() < now ? "overdue" : ""}`}><CalendarClock />Prazo {formatDeadline(task.dueAt)}</span>}</div>
       </div>
       <div className="task-value"><span>{done ? formatCurrency(calculateAmountCents(task.points, settings.pointValueCents)) : "Estimado"}</span><strong>{task.points} × {formatCurrency(settings.pointValueCents)}</strong></div>

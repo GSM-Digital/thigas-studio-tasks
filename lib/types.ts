@@ -11,6 +11,7 @@ export interface ClientSummary {
 export interface TaskView {
   id: string;
   title: string;
+  description?: string | null;
   clientId: string;
   clientName: string;
   clientColor: string;

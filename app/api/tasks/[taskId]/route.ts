@@ -5,7 +5,13 @@ import { createClient } from "@/lib/supabase/server";
 import { getTaskView } from "@/lib/task-view";
 import { reevaluateCompletedTask } from "@/lib/ai/reevaluate-task";
 
-const updateSchema = z.object({ completed: z.boolean() });
+const updateSchema = z.object({
+  completed: z.boolean().optional(),
+  description: z.string().trim().max(4_000).nullable().optional(),
+}).refine(
+  (input) => input.completed !== undefined || input.description !== undefined,
+  "Informe ao menos uma alteração.",
+);
 const paramsSchema = z.object({ taskId: z.uuid() });
 
 export async function PATCH(request: Request, context: { params: Promise<{ taskId: string }> }) {
@@ -13,10 +19,10 @@ export async function PATCH(request: Request, context: { params: Promise<{ taskI
     const viewer = await requireViewer();
     requireDeveloper(viewer);
     const { taskId } = paramsSchema.parse(await context.params);
-    const { completed } = await parseJson(request, updateSchema);
+    const input = await parseJson(request, updateSchema);
     const supabase = await createClient();
 
-    if (completed) {
+    if (input.completed) {
       const { data: active } = await supabase
         .from("time_entries")
         .select("id")
@@ -29,18 +35,21 @@ export async function PATCH(request: Request, context: { params: Promise<{ taskI
       }
     }
 
+    const updates = input.completed === undefined
+      ? { description: input.description?.trim() || null }
+      : {
+          status: input.completed ? "completed" as const : "open" as const,
+          completed_at: input.completed ? new Date().toISOString() : null,
+          approved_at: null,
+          approved_by: null,
+        };
     const { error } = await supabase
       .from("tasks")
-      .update({
-        status: completed ? "completed" : "open",
-        completed_at: completed ? new Date().toISOString() : null,
-        approved_at: null,
-        approved_by: null,
-      })
+      .update(updates)
       .eq("id", taskId)
       .eq("agency_id", viewer.agencyId);
     if (error) throw new ApiError(409, "TASK_UPDATE_FAILED", error.message);
-    if (completed) {
+    if (input.completed) {
       try {
         await reevaluateCompletedTask(taskId, viewer.agencyId);
       } catch (evaluationError) {

@@ -33,13 +33,24 @@ describe("formulário de nova demanda", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Título da nova tarefa" }), {
       target: { value: "Validar prazo personalizado" },
     });
+    fireEvent.change(screen.getByRole("textbox", { name: "Descrição da nova tarefa" }), {
+      target: { value: "Revisar o formulário e documentar o resultado." },
+    });
     fireEvent.change(screen.getByLabelText("Data e hora do prazo"), {
       target: { value: dueAtInput },
     });
     fireEvent.click(screen.getByRole("button", { name: "Adicionar" }));
 
     expect(await screen.findByRole("heading", { name: "Validar prazo personalizado" })).toBeVisible();
+    expect(screen.getByText("Revisar o formulário e documentar o resultado.")).toBeVisible();
     expect(screen.getByText(`Prazo ${formatDeadline(deadlineInputToIso(dueAtInput))}`)).toBeVisible();
+
+    fireEvent.click(screen.getByText("Revisar o formulário e documentar o resultado."));
+    fireEvent.change(screen.getByRole("textbox", { name: "Descrição de Validar prazo personalizado" }), {
+      target: { value: "Observação atualizada." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar descrição" }));
+    expect(screen.getByText("Observação atualizada.")).toBeVisible();
   });
 
   it("envia o SLA vazio para o Jarvis estimar automaticamente", async () => {

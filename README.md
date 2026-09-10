@@ -16,7 +16,7 @@ app/
 │   └── tasks/
 │       ├── route.ts                   # criação + pontuação base
 │       └── [taskId]/
-│           ├── route.ts               # concluir/reabrir
+│           ├── route.ts               # concluir/reabrir e editar observações
 │           ├── approval/route.ts       # aprovação exclusiva da agência
 │           ├── time/route.ts           # ajuste manual auditável
 │           └── timer/route.ts          # play/stop atômicos
@@ -32,7 +32,8 @@ lib/
 ├── ai/classifier.ts                    # prompt/Structured Output do Jarvis
 ├── ai/jarvis-chat.ts                   # interpretação conversacional validada
 ├── ai/reevaluate-task.ts               # reavaliação ao concluir/corrigir tempo
-├── domain/{points,time}.ts             # regras puras de domínio
+├── clients/resolve.ts                  # encontra ou cria clientes com proteção contra duplicidade
+├── domain/{client,points,time}.ts      # regras puras de domínio
 ├── reports/generate.ts                 # agrupamento e totalização
 ├── supabase/{browser,server,proxy}.ts  # clientes SSR/cookies
 ├── auth.ts, env.ts, http.ts             # segurança, ambiente e erros
@@ -58,7 +59,7 @@ A migration em `supabase/migrations/` cria:
 - `agencies`: tenant, moeda, fuso horário e valor vigente por ponto;
 - `profiles`: extensão de `auth.users`, com papéis `developer` e `agency`;
 - `clients`: clientes pertencentes à agência;
-- `tasks`: SLA, prazo de entrega (`due_at`), nível, pontos base, ajuste de eficiência, pontuação final, status e metadados do Jarvis;
+- `tasks`: título, descrição/observações, SLA, prazo de entrega (`due_at`), nível, pontos base, ajuste de eficiência, pontuação final, status e metadados do Jarvis;
 - `time_entries`: sessões imutáveis de cronômetro;
 - `task_time_adjustments`: trilha de auditoria da edição manual;
 - `billing_cycles` e `billing_items`: snapshot financeiro imutável de cada fechamento.
@@ -79,13 +80,13 @@ select cron.schedule(
 
 ## 3. Componente principal da UI
 
-`components/task-manager.tsx` contém a lista minimalista, checkboxes circulares, quick-add com SLA opcional em horas e prazo de entrega com data/hora, filtro e gerenciador de clientes, cronômetro em tempo real, edição `HH:MM:SS`, valores em BRL, light/dark mode e layouts responsivos. Quando o SLA fica vazio, o Jarvis estima o tempo médio de execução em incrementos de 15 minutos antes de salvar a demanda; qualquer valor digitado pelo usuário tem prioridade.
+`components/task-manager.tsx` contém a lista minimalista, checkboxes circulares, quick-add com descrição/observações, SLA opcional em horas e prazo de entrega com data/hora, filtro e gerenciador de clientes, cronômetro em tempo real, edição `HH:MM:SS`, valores em BRL, light/dark mode e layouts responsivos. Quando o SLA fica vazio, o Jarvis estima o tempo médio de execução em incrementos de 15 minutos antes de salvar a demanda; qualquer valor digitado pelo usuário tem prioridade. As observações podem ser editadas diretamente no card.
 
 - **Desenvolvedor:** cria, conclui/reabre, inicia/para, corrige o tempo e exclui tarefas em aberto com confirmação.
 - **Prioridade inteligente:** as pendências são ordenadas pelo último momento seguro para começar (`prazo − duração estimada ajustada ao risco`). A margem adicional é de 0% no nível 1, 15% no nível 2, 30% no nível 3 e 50% no nível 4. Prazos ausentes ou inválidos ficam no fim.
 - **Clientes:** o botão `+` ao lado de CLIENTES — ou “Gerenciar clientes” — abre o cadastro para adicionar, renomear, trocar a cor ou remover clientes.
 - **Agência:** consulta o ciclo, totalizações e entregas por cliente; a única mutação disponível é aprovar uma entrega concluída.
-- **Jarvis:** o botão no cabeçalho abre um chat que transforma uma solicitação em tarefa. Se cliente, estimativa ou data/hora estiverem ausentes, ele pede somente os dados faltantes.
+- **Jarvis:** o botão no cabeçalho abre um chat que transforma uma solicitação em tarefa. Ele estima o tempo quando necessário e cadastra automaticamente um cliente explicitamente mencionado que ainda não exista. O prazo de entrega nunca é inventado: se faltar data ou hora, ele pergunta ao usuário.
 - **PDF:** o botão “Salvar PDF” aplica uma folha de impressão dedicada e abre o diálogo nativo do navegador.
 - **Tabela:** exportação CSV UTF-8 com separador compatível com Excel pt-BR.
 
@@ -113,6 +114,7 @@ Resposta:
 {
   "nivel_complexidade": 2,
   "pontos_base": 10,
+  "cliente_nome": "Make One",
   "prazo_estimado_segundos": 7200,
   "bonus_ou_penalidade": "+0",
   "pontuacao_final": 10,
@@ -122,7 +124,7 @@ Resposta:
 
 O Jarvis usa saída JSON estruturada do Gemini, validação com Zod, timeout de 12 s e até duas novas tentativas para falhas transitórias. O modelo define nível/pontos base e redige a justificativa; o servidor recalcula o fator de eficiência deterministicamente, impedindo divergências financeiras. Sem tempo real, a pontuação inicial é igual aos pontos base. Ao concluir a tarefa — ou corrigir o tempo de uma tarefa concluída — o Jarvis reavalia o resultado.
 
-O chat usa `POST /api/jarvis/chat`. A conversa recente é enviada sem a chave da API sair do servidor. Quando os quatro dados obrigatórios — tarefa, cliente existente, estimativa de execução e data/hora de entrega — estão completos, o servidor valida a saída estruturada, grava a tarefa no Supabase e devolve o card pronto para a lista. Clientes inventados, prazos no passado e pontuações fora da faixa são recusados antes da persistência.
+O chat usa `POST /api/jarvis/chat`. A conversa recente é enviada sem a chave da API sair do servidor. Quando os três dados obrigatórios — tarefa, cliente identificável e data/hora de entrega — estão completos, o servidor valida a saída estruturada, estima o SLA ausente, encontra ou cadastra o cliente e grava a tarefa no Supabase. Nomes novos só são aceitos quando aparecem explicitamente na demanda; duplicidades por caixa/espaços e criações concorrentes são tratadas antes da persistência.
 
 As faixas são: nível 1 = 1–4, nível 2 = 5–15, nível 3 = 20–35 e nível 4 = 50–100 pontos base. O bônus varia de +20% a +40%; atrasos recebem penalidade de -20% a -50%. A chave do Gemini nunca é enviada ao navegador. O modelo `gemini-3.6-flash`, com raciocínio mínimo, foi escolhido pelo equilíbrio entre qualidade, baixa latência e custo; altere `GEMINI_CLASSIFICATION_MODEL` sem mudança de código.
 
@@ -141,7 +143,7 @@ npm run lint
 npm run build
 ```
 
-Os testes cobrem faixas de pontos, todas as bandas de eficiência, aritmética monetária, parse/edição de tempo, timer ativo, Structured Outputs, conversa do Jarvis, recusa de cliente inventado, criação de tarefa pelo chat, contrato HTTP em português, limite de período, agrupamento e CSV.
+Os testes cobrem faixas de pontos, todas as bandas de eficiência, aritmética monetária, parse/edição de tempo, observações, timer ativo, Structured Outputs, conversa do Jarvis, resolução/criação automática de clientes, criação de tarefa pelo chat, contrato HTTP em português, limite de período, agrupamento e CSV.
 
 Para validar o schema localmente, tenha Docker ativo e execute:
 

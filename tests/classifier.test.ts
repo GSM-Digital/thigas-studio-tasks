@@ -12,6 +12,7 @@ describe("avaliação do Jarvis", () => {
       clientWith({
         nivel_complexidade: 2,
         pontos_base: 10,
+        cliente_nome: null,
         prazo_estimado_segundos: 7200,
         bonus_ou_penalidade: "+1",
         pontuacao_final: 11,
@@ -44,6 +45,7 @@ describe("avaliação do Jarvis", () => {
       clientWith({
         nivel_complexidade: 2,
         pontos_base: 12,
+        cliente_nome: null,
         prazo_estimado_segundos: 7200,
         bonus_ou_penalidade: "+0",
         pontuacao_final: 12,
@@ -57,6 +59,7 @@ describe("avaliação do Jarvis", () => {
     const client = clientWith({
       nivel_complexidade: 1,
       pontos_base: 50,
+      cliente_nome: null,
       prazo_estimado_segundos: 1800,
       bonus_ou_penalidade: "+0",
       pontuacao_final: 50,
@@ -75,6 +78,7 @@ describe("avaliação do Jarvis", () => {
       clientWith({
         nivel_complexidade: 2,
         pontos_base: 10,
+        cliente_nome: "Full Body",
         prazo_estimado_segundos: 3700,
         bonus_ou_penalidade: "+0",
         pontuacao_final: 10,
@@ -86,6 +90,7 @@ describe("avaliação do Jarvis", () => {
     expect(classification).toMatchObject({
       estimatedDurationSeconds: 3600,
       estimateSource: "jarvis",
+      clientName: "Full Body",
       finalPoints: 10,
     });
   });

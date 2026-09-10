@@ -25,7 +25,9 @@ describe("conversa do Jarvis", () => {
           acao: "criar_tarefa",
           resposta: "Entendi a demanda.",
           titulo: "Configurar GA4",
+          descricao: "Validar todos os eventos no modo debug.",
           cliente_id: clients[0]!.id,
+          cliente_nome: "Make One",
           prazo_estimado_segundos: 7200,
           prazo_entrega_iso: "2030-04-18T15:00:00-03:00",
           nivel_complexidade: 2,
@@ -40,7 +42,9 @@ describe("conversa do Jarvis", () => {
       action: "create_task",
       task: {
         title: "Configurar GA4",
+        description: "Validar todos os eventos no modo debug.",
         clientId: clients[0]!.id,
+        clientName: "Make One",
         estimatedDurationSeconds: 7200,
         dueAt: "2030-04-18T18:00:00.000Z",
         classification: {
@@ -53,7 +57,7 @@ describe("conversa do Jarvis", () => {
     });
   });
 
-  it("pergunta somente quando faltam dados", async () => {
+  it("estima o tempo e pergunta apenas cliente e prazo quando eles faltam", async () => {
     const decision = await interpretJarvisConversation(
       [{ role: "user", content: "Preciso configurar o GA4." }],
       clients,
@@ -62,29 +66,31 @@ describe("conversa do Jarvis", () => {
         model: "gemini-3.6-flash",
         client: clientWith({
           acao: "perguntar",
-          resposta: "Para qual cliente e qual é a estimativa e o prazo de entrega?",
+          resposta: "Para qual cliente e até quando devo entregar? Informe data e hora.",
           titulo: "Configurar GA4",
+          descricao: null,
           cliente_id: null,
+          cliente_nome: null,
           prazo_estimado_segundos: null,
           prazo_entrega_iso: null,
           nivel_complexidade: null,
           pontos_base: null,
           justificativa: null,
-          campos_faltantes: ["cliente", "prazo_estimado", "prazo_entrega"],
+          campos_faltantes: ["cliente", "prazo_entrega"],
         }),
       },
     );
 
     expect(decision).toEqual({
       action: "ask",
-      message: "Para qual cliente e qual é a estimativa e o prazo de entrega?",
-      missingFields: ["cliente", "prazo_estimado", "prazo_entrega"],
+      message: "Para qual cliente e até quando devo entregar? Informe data e hora.",
+      missingFields: ["cliente", "prazo_entrega"],
     });
   });
 
-  it("não aceita cliente inventado pelo modelo", async () => {
+  it("aceita um cliente novo mencionado explicitamente e deixa o cadastro para a rota", async () => {
     const decision = await interpretJarvisConversation(
-      [{ role: "user", content: "Crie a demanda completa." }],
+      [{ role: "user", content: "Implemente o formulário da LP da Full Body amanhã às 15h." }],
       clients,
       {
         now,
@@ -92,8 +98,10 @@ describe("conversa do Jarvis", () => {
         client: clientWith({
           acao: "criar_tarefa",
           resposta: "Tudo pronto.",
-          titulo: "Configurar GA4",
-          cliente_id: "99999999-9999-4999-8999-999999999999",
+          titulo: "Implementar formulário LP",
+          descricao: null,
+          cliente_id: null,
+          cliente_nome: "Full Body",
           prazo_estimado_segundos: 7200,
           prazo_entrega_iso: "2030-04-18T15:00:00-03:00",
           nivel_complexidade: 2,
@@ -104,6 +112,14 @@ describe("conversa do Jarvis", () => {
       },
     );
 
-    expect(decision.action).toBe("ask");
+    expect(decision).toMatchObject({
+      action: "create_task",
+      task: {
+        title: "Implementar formulário LP",
+        clientId: null,
+        clientName: "Full Body",
+        estimatedDurationSeconds: 7200,
+      },
+    });
   });
 });
