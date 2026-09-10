@@ -65,6 +65,27 @@ interface JarvisUiMessage {
   content: string;
 }
 
+const ACTIVE_TIMER_FAVICON = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="#FF3B30"/></svg>',
+)}`;
+
+function useTimerFavicon(hasRunningTimer: boolean) {
+  useEffect(() => {
+    const favicon = document.createElement("link");
+    favicon.id = "task-status-favicon";
+    favicon.rel = "icon";
+    favicon.type = "image/svg+xml";
+    document.head.append(favicon);
+
+    return () => favicon.remove();
+  }, []);
+
+  useEffect(() => {
+    const favicon = document.querySelector<HTMLLinkElement>("#task-status-favicon");
+    if (favicon) favicon.href = hasRunningTimer ? ACTIVE_TIMER_FAVICON : "/icon.svg";
+  }, [hasRunningTimer]);
+}
+
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     ...init,
@@ -102,6 +123,9 @@ export function TaskManager({
   const [jarvisOpen, setJarvisOpen] = useState(false);
   const [dark, setDark] = useState<boolean | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const hasRunningTimer = tasks.some((task) => Boolean(task.activeTimerStartedAt));
+
+  useTimerFavicon(hasRunningTimer);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {

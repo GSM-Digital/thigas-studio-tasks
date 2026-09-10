@@ -222,3 +222,35 @@ describe("ordenação das demandas", () => {
     expect(await screen.findByRole("button", { name: "Editar cliente de Trocar cliente" })).toHaveTextContent(demoClients[1]!.name);
   });
 });
+
+describe("favicon do cronômetro", () => {
+  it("fica vermelho somente enquanto existe uma tarefa rodando", async () => {
+    const runningTask: TaskView = {
+      id: "running-task",
+      title: "Tarefa em andamento",
+      clientId: demoClients[0]!.id,
+      clientName: demoClients[0]!.name,
+      clientColor: demoClients[0]!.color,
+      status: "in_progress",
+      complexityLevel: 2,
+      basePoints: 8,
+      efficiencyAdjustment: 0,
+      points: 8,
+      estimatedDurationSeconds: 3600,
+      dueAt: "2030-04-20T18:00:00.000Z",
+      completedAt: null,
+      activeTimerStartedAt: new Date().toISOString(),
+      trackedSeconds: 0,
+      manualDurationSeconds: null,
+      classificationStatus: "classified",
+    };
+
+    render(<TaskManager initialTasks={[runningTask]} clients={demoClients} viewer={demoViewer} initialSettings={demoSettings} demoMode />);
+
+    await waitFor(() => expect(document.querySelector<HTMLLinkElement>("#task-status-favicon")?.href).toContain("data:image/svg+xml"));
+    expect(decodeURIComponent(document.querySelector<HTMLLinkElement>("#task-status-favicon")!.href)).toContain("#FF3B30");
+
+    fireEvent.click(screen.getByRole("button", { name: "Parar cronômetro" }));
+    await waitFor(() => expect(document.querySelector<HTMLLinkElement>("#task-status-favicon")?.getAttribute("href")).toBe("/icon.svg"));
+  });
+});

@@ -82,7 +82,7 @@ select cron.schedule(
 
 `components/task-manager.tsx` contém a lista minimalista, checkboxes circulares, quick-add com descrição/observações, SLA opcional em horas e prazo de entrega com data/hora, filtro e gerenciador de clientes, cronômetro em tempo real, edição `HH:MM:SS`, valores em BRL, light/dark mode e layouts responsivos. Quando o SLA fica vazio, o Jarvis estima o tempo médio de execução em incrementos de 15 minutos antes de salvar a demanda; qualquer valor digitado pelo usuário tem prioridade. As observações podem ser editadas diretamente no card.
 
-- **Desenvolvedor:** cria, conclui/reabre, inicia/para, corrige o tempo, troca o cliente ou o prazo diretamente no card e exclui tarefas em aberto com confirmação.
+- **Desenvolvedor:** cria, conclui/reabre, inicia/para, corrige o tempo, troca o cliente ou o prazo diretamente no card e exclui tarefas em aberto com confirmação. Enquanto houver qualquer cronômetro ativo, o favicon muda para um círculo vermelho e volta ao ícone normal ao parar o último timer.
 - **Prioridade inteligente:** as pendências são ordenadas pelo último momento seguro para começar (`prazo − duração estimada ajustada ao risco`). A margem adicional é de 0% no nível 1, 15% no nível 2, 30% no nível 3 e 50% no nível 4. Ao editar o prazo, a lista é recalculada e reordenada imediatamente. Prazos ausentes ou inválidos ficam no fim.
 - **Clientes:** o botão `+` ao lado de CLIENTES — ou “Gerenciar clientes” — abre o cadastro para adicionar, renomear, trocar a cor ou remover clientes.
 - **Agência:** consulta o ciclo, totalizações e entregas por cliente; a única mutação disponível é aprovar uma entrega concluída.
