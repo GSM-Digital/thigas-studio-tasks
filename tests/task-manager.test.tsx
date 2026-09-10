@@ -3,6 +3,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { TaskManager } from "@/components/task-manager";
 import { demoClients, demoSettings, demoViewer } from "@/lib/demo-data";
 import { deadlineInputToIso, formatDeadline } from "@/lib/domain/deadline";
+import type { TaskView } from "@/lib/types";
 
 beforeAll(() => {
   Object.defineProperty(window, "matchMedia", {
@@ -91,5 +92,44 @@ describe("formulário de nova demanda", () => {
       title: "Configurar eventos do GA4",
       estimatedDurationSeconds: null,
     });
+  });
+});
+
+describe("ordenação das demandas", () => {
+  it("exibe primeiro a tarefa que precisa começar antes", () => {
+    const dueAt = "2030-04-18T18:00:00.000Z";
+    const base: Omit<TaskView, "id" | "title" | "complexityLevel" | "estimatedDurationSeconds"> = {
+      clientId: demoClients[0]!.id,
+      clientName: demoClients[0]!.name,
+      clientColor: demoClients[0]!.color,
+      status: "open",
+      basePoints: 1,
+      efficiencyAdjustment: 0,
+      points: 1,
+      dueAt,
+      completedAt: null,
+      activeTimerStartedAt: null,
+      trackedSeconds: 0,
+      manualDurationSeconds: null,
+      classificationStatus: "classified",
+    };
+
+    render(
+      <TaskManager
+        initialTasks={[
+          { ...base, id: "short", title: "Tarefa curta", complexityLevel: 1, estimatedDurationSeconds: 1800 },
+          { ...base, id: "long", title: "Tarefa longa e complexa", complexityLevel: 4, estimatedDurationSeconds: 28_800 },
+        ]}
+        clients={demoClients}
+        viewer={demoViewer}
+        initialSettings={demoSettings}
+        demoMode
+      />,
+    );
+
+    expect(screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual([
+      "Tarefa longa e complexa",
+      "Tarefa curta",
+    ]);
   });
 });

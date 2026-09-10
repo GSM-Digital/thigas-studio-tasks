@@ -37,6 +37,7 @@ import {
   toDateTimeLocalValue,
 } from "@/lib/domain/deadline";
 import { calculateAmountCents, formatCurrency } from "@/lib/domain/points";
+import { sortTasksByUrgency } from "@/lib/domain/priority";
 import { effectiveDuration, formatDuration, parseDuration } from "@/lib/domain/time";
 import { generateBillingReport, reportToCsv } from "@/lib/reports/generate";
 import type {
@@ -447,7 +448,9 @@ function DeveloperView({
   const hasInvalidEstimate = estimatedHours.trim() !== "" && (
     !Number.isFinite(Number(estimatedHours)) || Number(estimatedHours) <= 0
   );
-  const openTasks = tasks.filter((task) => task.status !== "completed" && task.status !== "approved");
+  const openTasks = sortTasksByUrgency(
+    tasks.filter((task) => task.status !== "completed" && task.status !== "approved"),
+  );
   const completedTasks = tasks.filter((task) => task.status === "completed" || task.status === "approved");
   const todayCompleted = allTasks.filter((task) => task.completedAt?.slice(0, 10) === new Date().toISOString().slice(0, 10)).length;
   const effectiveClientId = clients.some((client) => client.id === clientId)
