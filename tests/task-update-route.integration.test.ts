@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   from: vi.fn(),
   getTaskView: vi.fn(),
+  reevaluateCompletedTask: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -19,7 +20,7 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn().mockImplementation(async () => ({ from: mocks.from })),
 }));
 vi.mock("@/lib/task-view", () => ({ getTaskView: mocks.getTaskView }));
-vi.mock("@/lib/ai/reevaluate-task", () => ({ reevaluateCompletedTask: vi.fn() }));
+vi.mock("@/lib/ai/reevaluate-task", () => ({ reevaluateCompletedTask: mocks.reevaluateCompletedTask }));
 
 import { PATCH } from "@/app/api/tasks/[taskId]/route";
 
@@ -29,6 +30,7 @@ describe("PATCH /api/tasks/[taskId]", () => {
   beforeEach(() => {
     mocks.from.mockReset();
     mocks.getTaskView.mockReset();
+    mocks.reevaluateCompletedTask.mockReset();
   });
 
   it("persiste a descrição opcional sem alterar o status", async () => {
@@ -113,5 +115,47 @@ describe("PATCH /api/tasks/[taskId]", () => {
     expect(clientsQuery.eq).toHaveBeenCalledWith("agency_id", "22222222-2222-4222-8222-222222222222");
     expect(clientsQuery.eq).toHaveBeenCalledWith("active", true);
     expect(tasksQuery.update).toHaveBeenCalledWith({ client_id: clientId });
+  });
+
+  it("exige um relato antes de concluir a tarefa", async () => {
+    const response = await PATCH(new Request(`http://localhost/api/tasks/${taskId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ completed: true }),
+    }), { params: Promise.resolve({ taskId }) });
+
+    expect(response.status).toBe(400);
+    expect(mocks.from).not.toHaveBeenCalled();
+  });
+
+  it("salva o relato e solicita a avaliação final do Jarvis", async () => {
+    const completionSummary = "Resolvi uma incompatibilidade do script e validei todos os eventos no ambiente final.";
+    const timerQuery = { select: vi.fn(), eq: vi.fn(), is: vi.fn(), maybeSingle: vi.fn() };
+    timerQuery.select.mockReturnValue(timerQuery);
+    timerQuery.eq.mockReturnValue(timerQuery);
+    timerQuery.is.mockReturnValue(timerQuery);
+    timerQuery.maybeSingle.mockResolvedValue({ data: null, error: null });
+    const taskQuery = { update: vi.fn(), eq: vi.fn() };
+    taskQuery.update.mockReturnValue(taskQuery);
+    taskQuery.eq.mockReturnValueOnce(taskQuery).mockResolvedValueOnce({ error: null });
+    mocks.from.mockImplementation((table: string) => table === "time_entries" ? timerQuery : taskQuery);
+    mocks.reevaluateCompletedTask.mockResolvedValue(undefined);
+    mocks.getTaskView.mockResolvedValue({ id: taskId, status: "completed", completionSummary, executionAdjustment: 2 });
+
+    const response = await PATCH(new Request(`http://localhost/api/tasks/${taskId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ completed: true, completionSummary }),
+    }), { params: Promise.resolve({ taskId }) });
+
+    expect(response.status).toBe(200);
+    expect(taskQuery.update).toHaveBeenCalledWith(expect.objectContaining({
+      status: "completed",
+      completion_summary: completionSummary,
+      completion_rationale: null,
+      classification_status: "pending",
+    }));
+    expect(mocks.reevaluateCompletedTask).toHaveBeenCalledWith(taskId, "22222222-2222-4222-8222-222222222222");
+    await expect(response.json()).resolves.toMatchObject({ task: { completionSummary, executionAdjustment: 2 } });
   });
 });

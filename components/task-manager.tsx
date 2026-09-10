@@ -29,6 +29,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   createDefaultDeadline,
   dateKeyAtTimeZone,
@@ -37,7 +38,7 @@ import {
   isFutureDeadline,
   toDateTimeLocalValue,
 } from "@/lib/domain/deadline";
-import { calculateAmountCents, formatCurrency } from "@/lib/domain/points";
+import { calculateAmountCents, calculateEfficiencyScore, formatCurrency } from "@/lib/domain/points";
 import { sortTasksByUrgency } from "@/lib/domain/priority";
 import { effectiveDuration, formatDuration, parseDuration } from "@/lib/domain/time";
 import { generateBillingReport, reportToCsv } from "@/lib/reports/generate";
@@ -58,6 +59,13 @@ interface TaskManagerProps {
 }
 
 type ViewMode = "developer" | "agency";
+
+type TaskMutator = (
+  id: string,
+  action: () => Promise<TaskView>,
+  fallback: (task: TaskView) => TaskView,
+  options?: { optimistic?: boolean },
+) => Promise<boolean>;
 
 interface JarvisUiMessage {
   id: string;
@@ -167,16 +175,22 @@ export function TaskManager({
     id: string,
     action: () => Promise<TaskView>,
     fallback: (task: TaskView) => TaskView,
-  ) {
+    options: { optimistic?: boolean } = {},
+  ): Promise<boolean> {
     const previous = tasks;
-    setTasks((current) => current.map((task) => (task.id === id ? fallback(task) : task)));
-    if (demoMode) return;
+    const optimistic = options.optimistic !== false;
+    if (optimistic || demoMode) {
+      setTasks((current) => current.map((task) => (task.id === id ? fallback(task) : task)));
+    }
+    if (demoMode) return true;
     try {
       const updated = await action();
       setTasks((current) => current.map((task) => (task.id === id ? updated : task)));
+      return true;
     } catch (error) {
-      setTasks(previous);
+      if (optimistic) setTasks(previous);
       showNotice(error instanceof Error ? error.message : "Ação não concluída.");
+      return false;
     }
   }
 
@@ -480,7 +494,7 @@ function DeveloperView({
   settings: WorkspaceSettings;
   demoMode: boolean;
   onTasksChange: React.Dispatch<React.SetStateAction<TaskView[]>>;
-  onMutateTask: (id: string, action: () => Promise<TaskView>, fallback: (task: TaskView) => TaskView) => Promise<void>;
+  onMutateTask: TaskMutator;
   onRemoveTask: (id: string) => Promise<void>;
   onClientResolved: (client: ClientSummary) => void;
   onNotice: (message: string) => void;
@@ -543,7 +557,8 @@ function DeveloperView({
           id: crypto.randomUUID(), title: cleanTitle, clientId: effectiveClientId, clientName: client.name,
           description: description.trim() || null,
           clientColor: client.color, status: "open", complexityLevel: 2,
-          basePoints: 8, efficiencyAdjustment: 0, points: 8, estimatedDurationSeconds: demoEstimatedDurationSeconds,
+          completionSummary: null, completionRationale: null,
+          basePoints: 8, efficiencyAdjustment: 0, executionAdjustment: 0, points: 8, estimatedDurationSeconds: demoEstimatedDurationSeconds,
           dueAt: dueAtIso, completedAt: null, activeTimerStartedAt: null, trackedSeconds: 0,
           manualDurationSeconds: null, classificationStatus: "classified",
         };
@@ -622,7 +637,7 @@ function DeveloperView({
   );
 }
 
-function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskView; clients: ClientSummary[]; settings: WorkspaceSettings; onMutate: (id: string, action: () => Promise<TaskView>, fallback: (task: TaskView) => TaskView) => Promise<void>; onRemove?: (id: string) => Promise<void> }) {
+function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskView; clients: ClientSummary[]; settings: WorkspaceSettings; onMutate: TaskMutator; onRemove?: (id: string) => Promise<void> }) {
   const [editingTime, setEditingTime] = useState(false);
   const [timeInput, setTimeInput] = useState("");
   const [editingDescription, setEditingDescription] = useState(false);
@@ -634,6 +649,10 @@ function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskVi
   const [now, setNow] = useState(0);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [completionOpen, setCompletionOpen] = useState(false);
+  const [completionInput, setCompletionInput] = useState(task.completionSummary ?? "");
+  const [preparingCompletion, setPreparingCompletion] = useState(false);
+  const [completing, setCompleting] = useState(false);
   const done = task.status === "completed" || task.status === "approved";
   const running = Boolean(task.activeTimerStartedAt);
 
@@ -648,13 +667,61 @@ function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskVi
 
   const seconds = effectiveDuration(task.trackedSeconds, task.manualDurationSeconds, task.activeTimerStartedAt, now);
 
-  function toggleDone() {
-    const completed = !done;
+  function reopenTask() {
     void onMutate(
       task.id,
-      async () => (await requestJson<{ task: TaskView }>(`/api/tasks/${task.id}`, { method: "PATCH", body: JSON.stringify({ completed }) })).task,
-      (current) => ({ ...current, status: completed ? "completed" : "open", completedAt: completed ? new Date().toISOString() : null, activeTimerStartedAt: null }),
+      async () => (await requestJson<{ task: TaskView }>(`/api/tasks/${task.id}`, { method: "PATCH", body: JSON.stringify({ completed: false }) })).task,
+      (current) => ({ ...current, status: "open", completedAt: null, activeTimerStartedAt: null }),
     );
+  }
+
+  async function openCompletion() {
+    if (preparingCompletion) return;
+    if (running) {
+      setPreparingCompletion(true);
+      const stopped = await onMutate(
+        task.id,
+        async () => (await requestJson<{ task: TaskView }>(`/api/tasks/${task.id}/timer`, { method: "POST", body: JSON.stringify({ action: "stop" }) })).task,
+        (current) => ({ ...current, trackedSeconds: seconds, activeTimerStartedAt: null, status: "in_progress" }),
+      );
+      setPreparingCompletion(false);
+      if (!stopped) return;
+    }
+    setCompletionInput(task.completionSummary ?? "");
+    setCompletionOpen(true);
+  }
+
+  async function completeTask(event: React.FormEvent) {
+    event.preventDefault();
+    const completionSummary = completionInput.trim();
+    if (completionSummary.length < 10 || completing) return;
+    setCompleting(true);
+    const completedAt = new Date().toISOString();
+    const completed = await onMutate(
+      task.id,
+      async () => (await requestJson<{ task: TaskView }>(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ completed: true, completionSummary }),
+      })).task,
+      (current) => {
+        const actualSeconds = current.manualDurationSeconds ?? current.trackedSeconds;
+        const efficiency = calculateEfficiencyScore(current.basePoints, current.estimatedDurationSeconds, actualSeconds);
+        return {
+          ...current,
+          completionSummary,
+          completionRationale: "A execução seguiu o escopo esperado; o Jarvis não identificou mérito técnico adicional no modo de teste.",
+          efficiencyAdjustment: efficiency.adjustment,
+          executionAdjustment: 0,
+          points: efficiency.finalPoints,
+          status: "completed",
+          completedAt,
+          activeTimerStartedAt: null,
+        };
+      },
+      { optimistic: false },
+    );
+    setCompleting(false);
+    if (completed) setCompletionOpen(false);
   }
 
   function toggleTimer() {
@@ -747,7 +814,7 @@ function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskVi
 
   return (
     <article className={`task-row ${done ? "is-done" : ""}`}>
-      <button className="check-button" onClick={toggleDone} aria-label={done ? "Reabrir tarefa" : "Concluir tarefa"}>{done && <Check />}</button>
+      <button className="check-button" onClick={done ? reopenTask : () => void openCompletion()} disabled={preparingCompletion} aria-label={done ? "Reabrir tarefa" : "Concluir tarefa"}>{preparingCompletion ? <LoaderCircle className="spin" /> : done && <Check />}</button>
       <div className="task-main">
         <h3>{task.title}</h3>
         {editingDescription ? (
@@ -760,6 +827,17 @@ function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskVi
           <button className={`task-description ${task.description ? "has-description" : ""}`} onClick={() => setEditingDescription(true)} title="Editar descrição e observações">
             {task.description ? <span>{task.description}</span> : <span>Adicionar observação</span>}<Pencil />
           </button>
+        )}
+        {done && task.completionSummary && (
+          <div className="completion-report">
+            <Sparkles />
+            <div>
+              <strong>Relato de conclusão</strong>
+              <p>{task.completionSummary}</p>
+              {task.completionRationale && <small>Jarvis: {task.completionRationale}</small>}
+              {task.classificationStatus === "failed" && <small className="completion-evaluation-failed">A avaliação final do Jarvis ficou pendente.</small>}
+            </div>
+          </div>
         )}
         <div className="task-meta">
           {!done && editingClient ? (
@@ -783,7 +861,8 @@ function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskVi
           )}
           <span className={`level-badge level-${task.complexityLevel}`}>Nível {task.complexityLevel}</span>
           <span className="points">{task.points} pts</span>
-          {task.efficiencyAdjustment !== 0 && <span className={`efficiency-badge ${task.efficiencyAdjustment > 0 ? "positive" : "negative"}`}>{task.efficiencyAdjustment > 0 ? "+" : ""}{task.efficiencyAdjustment}</span>}
+          {task.efficiencyAdjustment !== 0 && <span className={`efficiency-badge ${task.efficiencyAdjustment > 0 ? "positive" : "negative"}`} title="Ajuste por eficiência de tempo">{task.efficiencyAdjustment > 0 ? "+" : ""}{task.efficiencyAdjustment} tempo</span>}
+          {task.executionAdjustment > 0 && <span className="efficiency-badge positive" title="Bônus de execução avaliado pelo Jarvis">+{task.executionAdjustment} execução</span>}
           <span className="sla-label">SLA {formatDuration(task.estimatedDurationSeconds)}</span>
           {!done && editingDueAt ? (
             <form className="due-editor" onSubmit={saveDueAt}>
@@ -813,11 +892,47 @@ function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskVi
         {!done && <button className={`play-button ${running ? "running" : ""}`} onClick={toggleTimer} aria-label={running ? "Parar cronômetro" : "Iniciar cronômetro"}>{running ? <Pause /> : <Play />}</button>}
         {!done && onRemove && <button className={`delete-task-button ${confirmingDelete ? "confirming" : ""}`} onClick={() => void deleteTask()} onBlur={() => !deleting && setConfirmingDelete(false)} disabled={running || deleting} aria-label={confirmingDelete ? `Confirmar exclusão de ${task.title}` : `Excluir ${task.title}`} title={running ? "Pare o cronômetro antes de excluir" : "Excluir tarefa"}>{deleting ? <LoaderCircle className="spin" /> : confirmingDelete ? <span>Excluir</span> : <Trash2 />}</button>}
       </div>
+      {completionOpen && createPortal((
+        <div className="completion-modal-backdrop" onMouseDown={() => !completing && setCompletionOpen(false)}>
+          <section className="completion-modal" role="dialog" aria-modal="true" aria-labelledby={`completion-title-${task.id}`} onMouseDown={(event) => event.stopPropagation()}>
+            <div className="completion-modal-head">
+              <span><Sparkles /></span>
+              <div><p>FECHAMENTO ASSISTIDO</p><h2 id={`completion-title-${task.id}`}>Como foi a execução?</h2></div>
+              <button type="button" onClick={() => setCompletionOpen(false)} disabled={completing} aria-label="Fechar relato de conclusão"><X /></button>
+            </div>
+            <p className="completion-task-title">{task.title}</p>
+            <div className="completion-context">
+              <span><Clock3 /> Real {formatDuration(seconds)}</span>
+              <span>SLA {formatDuration(task.estimatedDurationSeconds)}</span>
+              <span>{task.basePoints} pontos-base</span>
+            </div>
+            <form onSubmit={completeTask}>
+              <label htmlFor={`completion-summary-${task.id}`}>Breve relato da conclusão</label>
+              <textarea
+                id={`completion-summary-${task.id}`}
+                autoFocus
+                required
+                minLength={10}
+                maxLength={4000}
+                rows={6}
+                value={completionInput}
+                onChange={(event) => setCompletionInput(event.target.value)}
+                placeholder="Conte o que foi feito, se ocorreu algum problema e como você resolveu..."
+              />
+              <div className="completion-hint"><Sparkles /><span>O Jarvis analisará somente evidências concretas de esforço adicional. O relato não gera bônus automaticamente.</span></div>
+              <div className="completion-actions">
+                <button type="button" onClick={() => setCompletionOpen(false)} disabled={completing}>Cancelar</button>
+                <button type="submit" disabled={completing || completionInput.trim().length < 10}>{completing ? <LoaderCircle className="spin" /> : <Sparkles />} Concluir e avaliar</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      ), document.body)}
     </article>
   );
 }
 
-function AgencyView({ tasks, settings, demoMode, onMutateTask }: { tasks: TaskView[]; settings: WorkspaceSettings; demoMode: boolean; onMutateTask: (id: string, action: () => Promise<TaskView>, fallback: (task: TaskView) => TaskView) => Promise<void> }) {
+function AgencyView({ tasks, settings, demoMode, onMutateTask }: { tasks: TaskView[]; settings: WorkspaceSettings; demoMode: boolean; onMutateTask: TaskMutator }) {
   const completed = tasks.filter((task) => task.completedAt);
   const period = billingWindow();
   const report = generateBillingReport({

@@ -6,7 +6,7 @@ export async function getTaskView(taskId: string): Promise<TaskView> {
   const supabase = await createClient();
   const { data: task, error } = await supabase
     .from("tasks")
-    .select("id, title, description, client_id, status, complexity_level, base_points, efficiency_adjustment, points, estimated_duration_seconds, due_at, completed_at, tracked_seconds, manual_duration_seconds, classification_status")
+    .select("id, title, description, completion_summary, completion_rationale, client_id, status, complexity_level, base_points, efficiency_adjustment, execution_adjustment, points, estimated_duration_seconds, due_at, completed_at, tracked_seconds, manual_duration_seconds, classification_status")
     .eq("id", taskId)
     .single();
   if (error || !task) throw new ApiError(404, "TASK_NOT_FOUND", "Tarefa não encontrada.");
@@ -25,6 +25,8 @@ export async function getTaskView(taskId: string): Promise<TaskView> {
     id: task.id,
     title: task.title,
     description: task.description,
+    completionSummary: task.completion_summary,
+    completionRationale: task.completion_rationale,
     clientId: task.client_id,
     clientName: client?.name ?? "Cliente removido",
     clientColor: client?.color ?? "#8e8e93",
@@ -32,6 +34,7 @@ export async function getTaskView(taskId: string): Promise<TaskView> {
     complexityLevel: task.complexity_level,
     basePoints: task.base_points,
     efficiencyAdjustment: task.efficiency_adjustment,
+    executionAdjustment: task.execution_adjustment,
     points: task.points,
     estimatedDurationSeconds: task.estimated_duration_seconds,
     dueAt: task.due_at,

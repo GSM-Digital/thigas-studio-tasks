@@ -114,8 +114,11 @@ describe("ordenação das demandas", () => {
       clientName: demoClients[0]!.name,
       clientColor: demoClients[0]!.color,
       status: "open",
+      completionSummary: null,
+      completionRationale: null,
       basePoints: 1,
       efficiencyAdjustment: 0,
+      executionAdjustment: 0,
       points: 1,
       dueAt,
       completedAt: null,
@@ -150,9 +153,12 @@ describe("ordenação das demandas", () => {
       clientName: demoClients[0]!.name,
       clientColor: demoClients[0]!.color,
       status: "open",
+      completionSummary: null,
+      completionRationale: null,
       complexityLevel: 2,
       basePoints: 8,
       efficiencyAdjustment: 0,
+      executionAdjustment: 0,
       points: 8,
       estimatedDurationSeconds: 3600,
       completedAt: null,
@@ -199,9 +205,12 @@ describe("ordenação das demandas", () => {
       clientName: demoClients[0]!.name,
       clientColor: demoClients[0]!.color,
       status: "open",
+      completionSummary: null,
+      completionRationale: null,
       complexityLevel: 1,
       basePoints: 2,
       efficiencyAdjustment: 0,
+      executionAdjustment: 0,
       points: 2,
       estimatedDurationSeconds: 1800,
       dueAt: "2030-04-20T18:00:00.000Z",
@@ -232,9 +241,12 @@ describe("favicon do cronômetro", () => {
       clientName: demoClients[0]!.name,
       clientColor: demoClients[0]!.color,
       status: "in_progress",
+      completionSummary: null,
+      completionRationale: null,
       complexityLevel: 2,
       basePoints: 8,
       efficiencyAdjustment: 0,
+      executionAdjustment: 0,
       points: 8,
       estimatedDurationSeconds: 3600,
       dueAt: "2030-04-20T18:00:00.000Z",
@@ -252,5 +264,49 @@ describe("favicon do cronômetro", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Parar cronômetro" }));
     await waitFor(() => expect(document.querySelector<HTMLLinkElement>("#task-status-favicon")?.getAttribute("href")).toBe("/icon.svg"));
+  });
+});
+
+describe("fechamento assistido pelo Jarvis", () => {
+  it("exige um relato antes de concluir e exibe o registro na tarefa", async () => {
+    const task: TaskView = {
+      id: "task-to-complete",
+      title: "Corrigir integração do formulário",
+      description: "Validar também o envio ao CRM.",
+      completionSummary: null,
+      completionRationale: null,
+      clientId: demoClients[0]!.id,
+      clientName: demoClients[0]!.name,
+      clientColor: demoClients[0]!.color,
+      status: "open",
+      complexityLevel: 2,
+      basePoints: 10,
+      efficiencyAdjustment: 0,
+      executionAdjustment: 0,
+      points: 10,
+      estimatedDurationSeconds: 7200,
+      dueAt: "2030-04-20T18:00:00.000Z",
+      completedAt: null,
+      activeTimerStartedAt: null,
+      trackedSeconds: 5400,
+      manualDurationSeconds: null,
+      classificationStatus: "classified",
+    };
+
+    render(<TaskManager initialTasks={[task]} clients={demoClients} viewer={demoViewer} initialSettings={demoSettings} demoMode />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Concluir tarefa" }));
+    expect(screen.getByRole("dialog", { name: "Como foi a execução?" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Concluir e avaliar" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Concluir tarefa" })).toBeVisible();
+
+    const summary = "Havia um conflito no script externo; corrigi a ordem de carregamento e validei os leads no CRM.";
+    fireEvent.change(screen.getByLabelText("Breve relato da conclusão"), { target: { value: summary } });
+    fireEvent.click(screen.getByRole("button", { name: "Concluir e avaliar" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Como foi a execução?" })).not.toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Reabrir tarefa" })).toBeVisible();
+    expect(screen.getByText(summary)).toBeVisible();
+    expect(screen.getByText(/Jarvis: A execução seguiu o escopo esperado/)).toBeVisible();
   });
 });

@@ -12,6 +12,8 @@ export interface TaskView {
   id: string;
   title: string;
   description?: string | null;
+  completionSummary: string | null;
+  completionRationale: string | null;
   clientId: string;
   clientName: string;
   clientColor: string;
@@ -19,6 +21,7 @@ export interface TaskView {
   complexityLevel: 1 | 2 | 3 | 4;
   basePoints: number;
   efficiencyAdjustment: number;
+  executionAdjustment: number;
   points: number;
   estimatedDurationSeconds: number;
   dueAt: string | null;

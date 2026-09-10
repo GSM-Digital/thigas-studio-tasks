@@ -37,10 +37,13 @@ type TaskRow = {
   created_by: string;
   title: string;
   description: string | null;
+  completion_summary: string | null;
+  completion_rationale: string | null;
   status: "open" | "in_progress" | "completed" | "approved";
   complexity_level: 1 | 2 | 3 | 4;
   base_points: number;
   efficiency_adjustment: number;
+  execution_adjustment: number;
   points: number;
   estimated_duration_seconds: number;
   due_at: string | null;

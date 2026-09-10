@@ -9,15 +9,31 @@ import { reevaluateCompletedTask } from "@/lib/ai/reevaluate-task";
 const updateSchema = z.object({
   completed: z.boolean().optional(),
   description: z.string().trim().max(4_000).nullable().optional(),
+  completionSummary: z.string().trim().min(10).max(4_000).optional(),
   clientId: z.uuid().optional(),
   dueAt: z.string().datetime({ offset: true }).refine(
     (value) => new Date(value).getTime() > Date.now(),
     "O prazo deve estar no futuro.",
   ).optional(),
-}).refine(
-  (input) => input.completed !== undefined || input.description !== undefined || input.clientId !== undefined || input.dueAt !== undefined,
-  "Informe ao menos uma alteração.",
-);
+}).superRefine((input, context) => {
+  if (input.completed === undefined && input.description === undefined && input.clientId === undefined && input.dueAt === undefined) {
+    context.addIssue({ code: "custom", message: "Informe ao menos uma alteração." });
+  }
+  if (input.completed === true && !input.completionSummary) {
+    context.addIssue({
+      code: "custom",
+      path: ["completionSummary"],
+      message: "Descreva brevemente como foi a execução antes de concluir.",
+    });
+  }
+  if (input.completionSummary !== undefined && input.completed !== true) {
+    context.addIssue({
+      code: "custom",
+      path: ["completionSummary"],
+      message: "O relato de conclusão só pode ser enviado ao concluir a tarefa.",
+    });
+  }
+});
 const paramsSchema = z.object({ taskId: z.uuid() });
 
 export async function PATCH(request: Request, context: { params: Promise<{ taskId: string }> }) {
@@ -63,6 +79,11 @@ export async function PATCH(request: Request, context: { params: Promise<{ taskI
       updates.approved_at = null;
       updates.approved_by = null;
     }
+    if (input.completed) {
+      updates.completion_summary = input.completionSummary;
+      updates.completion_rationale = null;
+      updates.classification_status = "pending";
+    }
     const { error } = await supabase
       .from("tasks")
       .update(updates)
@@ -74,6 +95,11 @@ export async function PATCH(request: Request, context: { params: Promise<{ taskI
         await reevaluateCompletedTask(taskId, viewer.agencyId);
       } catch (evaluationError) {
         console.error("Jarvis task evaluation failed", evaluationError);
+        await supabase
+          .from("tasks")
+          .update({ classification_status: "failed" })
+          .eq("id", taskId)
+          .eq("agency_id", viewer.agencyId);
       }
     }
     return Response.json({ task: await getTaskView(taskId) });

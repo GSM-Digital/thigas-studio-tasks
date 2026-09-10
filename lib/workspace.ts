@@ -21,7 +21,7 @@ export async function loadWorkspace(viewer: Viewer): Promise<{
     supabase
       .from("tasks")
       .select(
-        "id, title, description, client_id, status, complexity_level, base_points, efficiency_adjustment, points, estimated_duration_seconds, due_at, completed_at, tracked_seconds, manual_duration_seconds, classification_status, created_at",
+        "id, title, description, completion_summary, completion_rationale, client_id, status, complexity_level, base_points, efficiency_adjustment, execution_adjustment, points, estimated_duration_seconds, due_at, completed_at, tracked_seconds, manual_duration_seconds, classification_status, created_at",
       )
       .eq("agency_id", viewer.agencyId)
       .order("created_at", { ascending: false })
@@ -57,6 +57,8 @@ export async function loadWorkspace(viewer: Viewer): Promise<{
       id: task.id,
       title: task.title,
       description: task.description,
+      completionSummary: task.completion_summary,
+      completionRationale: task.completion_rationale,
       clientId: task.client_id,
       clientName: client?.name ?? "Cliente removido",
       clientColor: client?.color ?? "#8e8e93",
@@ -64,6 +66,7 @@ export async function loadWorkspace(viewer: Viewer): Promise<{
       complexityLevel: task.complexity_level,
       basePoints: task.base_points,
       efficiencyAdjustment: task.efficiency_adjustment,
+      executionAdjustment: task.execution_adjustment,
       points: task.points,
       estimatedDurationSeconds: task.estimated_duration_seconds,
       dueAt: task.due_at,
