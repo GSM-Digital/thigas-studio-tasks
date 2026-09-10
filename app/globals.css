@@ -159,8 +159,18 @@ button { color: inherit; }
 .task-description-editor button:first-of-type { color: var(--blue); }
 .task-description-editor svg { width: 12px; }
 .task-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 11px; line-height: 1.25; }
-.client-tag { display: flex; align-items: center; gap: 5px; color: var(--muted); }
+.client-tag { display: flex; align-items: center; gap: 5px; padding: 0; border: 0; background: transparent; color: var(--muted); font: inherit; cursor: pointer; }
+.client-tag:disabled { cursor: default; }
 .client-tag i { width: 6px; height: 6px; border-radius: 50%; }
+.client-tag svg { width: 9px; height: 9px; opacity: .65; }
+.task-client-editor { display: inline-flex; align-items: center; gap: 4px; }
+.task-client-editor > i { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; }
+.task-client-editor select { max-width: 130px; padding: 4px 20px 4px 6px; appearance: none; border: 1px solid var(--blue); border-radius: 6px; outline: 0; background: var(--surface-2); color: var(--text); font-size: 9px; }
+.task-client-editor > svg { width: 10px; margin-left: -19px; pointer-events: none; color: var(--muted); }
+.task-client-editor button { width: 22px; height: 22px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 6px; background: var(--surface-2); color: var(--muted); cursor: pointer; }
+.task-client-editor button:disabled { opacity: .4; cursor: default; }
+.task-client-editor button:first-of-type { color: var(--blue); }
+.task-client-editor button svg { width: 11px; }
 .level-badge { padding: 4px 7px; border-radius: 6px; font-weight: 700; }
 .level-1 { color: #248a3d; background: #e7f8eb; }.level-2 { color: #1267cc; background: #e7f1ff; }.level-3 { color: #a35d00; background: #fff2db; }.level-4 { color: #c52d30; background: #ffe9e9; }
 :root[data-theme="dark"] .level-1 { background:#193b23 }:root[data-theme="dark"] .level-2 { background:#173154 }:root[data-theme="dark"] .level-3 { background:#493315 }:root[data-theme="dark"] .level-4 { background:#4a2022 }
@@ -169,9 +179,19 @@ button { color: inherit; }
 .efficiency-badge.positive { color: var(--green); background: color-mix(in srgb, var(--green) 12%, transparent); }
 .efficiency-badge.negative { color: #ff453a; background: rgba(255,69,58,.11); }
 .sla-label { color: var(--muted); }
-.due-label { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.due-label { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; background: transparent; color: var(--muted); font: inherit; font-variant-numeric: tabular-nums; cursor: pointer; }
+.due-label:disabled { cursor: default; }
 .due-label svg { width: 12px; height: 12px; }
+.due-label svg:last-child:not(:first-child) { width: 9px; height: 9px; opacity: .65; }
 .due-label.overdue { color: #ff453a; font-weight: 700; }
+.due-editor { display: inline-flex; align-items: center; gap: 4px; }
+.due-editor > svg { width: 12px; height: 12px; color: var(--blue); }
+.due-editor input { width: 145px; min-width: 0; padding: 4px 6px; border: 1px solid var(--blue); border-radius: 6px; outline: 0; background: var(--surface-2); color: var(--text); font-size: 9px; color-scheme: light; }
+:root[data-theme="dark"] .due-editor input { color-scheme: dark; }
+.due-editor button { width: 22px; height: 22px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 6px; background: var(--surface-2); color: var(--muted); cursor: pointer; }
+.due-editor button:disabled { opacity: .4; cursor: default; }
+.due-editor button:first-of-type { color: var(--blue); }
+.due-editor button svg { width: 11px; }
 .task-value { display: flex; flex-direction: column; text-align: right; }
 .task-value span { font-size: 11px; font-weight: 650; }
 .task-value strong { margin-top: 3px; color: var(--muted); font-size: 8px; font-weight: 500; }

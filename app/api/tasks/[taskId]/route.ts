@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { requireDeveloper, requireViewer } from "@/lib/auth";
+import type { Database } from "@/lib/database.types";
 import { ApiError, jsonError, parseJson } from "@/lib/http";
 import { createClient } from "@/lib/supabase/server";
 import { getTaskView } from "@/lib/task-view";
@@ -8,8 +9,13 @@ import { reevaluateCompletedTask } from "@/lib/ai/reevaluate-task";
 const updateSchema = z.object({
   completed: z.boolean().optional(),
   description: z.string().trim().max(4_000).nullable().optional(),
+  clientId: z.uuid().optional(),
+  dueAt: z.string().datetime({ offset: true }).refine(
+    (value) => new Date(value).getTime() > Date.now(),
+    "O prazo deve estar no futuro.",
+  ).optional(),
 }).refine(
-  (input) => input.completed !== undefined || input.description !== undefined,
+  (input) => input.completed !== undefined || input.description !== undefined || input.clientId !== undefined || input.dueAt !== undefined,
   "Informe ao menos uma alteração.",
 );
 const paramsSchema = z.object({ taskId: z.uuid() });
@@ -21,6 +27,18 @@ export async function PATCH(request: Request, context: { params: Promise<{ taskI
     const { taskId } = paramsSchema.parse(await context.params);
     const input = await parseJson(request, updateSchema);
     const supabase = await createClient();
+
+    if (input.clientId) {
+      const { data: client, error: clientError } = await supabase
+        .from("clients")
+        .select("id")
+        .eq("id", input.clientId)
+        .eq("agency_id", viewer.agencyId)
+        .eq("active", true)
+        .maybeSingle();
+      if (clientError) throw new ApiError(500, "CLIENT_READ_FAILED", "Não foi possível consultar o cliente.");
+      if (!client) throw new ApiError(404, "CLIENT_NOT_FOUND", "Cliente não encontrado.");
+    }
 
     if (input.completed) {
       const { data: active } = await supabase
@@ -35,14 +53,16 @@ export async function PATCH(request: Request, context: { params: Promise<{ taskI
       }
     }
 
-    const updates = input.completed === undefined
-      ? { description: input.description?.trim() || null }
-      : {
-          status: input.completed ? "completed" as const : "open" as const,
-          completed_at: input.completed ? new Date().toISOString() : null,
-          approved_at: null,
-          approved_by: null,
-        };
+    const updates: Database["public"]["Tables"]["tasks"]["Update"] = {};
+    if (input.description !== undefined) updates.description = input.description?.trim() || null;
+    if (input.clientId !== undefined) updates.client_id = input.clientId;
+    if (input.dueAt !== undefined) updates.due_at = input.dueAt;
+    if (input.completed !== undefined) {
+      updates.status = input.completed ? "completed" : "open";
+      updates.completed_at = input.completed ? new Date().toISOString() : null;
+      updates.approved_at = null;
+      updates.approved_by = null;
+    }
     const { error } = await supabase
       .from("tasks")
       .update(updates)

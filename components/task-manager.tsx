@@ -582,7 +582,7 @@ function DeveloperView({
 
       <div className="list-toolbar"><span>{openTasks.length} pendentes</span><button><SlidersHorizontal /> Filtrar</button></div>
       <div className="task-list">
-        {openTasks.map((task) => <TaskRow key={task.id} task={task} settings={settings} onMutate={onMutateTask} onRemove={onRemoveTask} />)}
+        {openTasks.map((task) => <TaskRow key={task.id} task={task} clients={clients} settings={settings} onMutate={onMutateTask} onRemove={onRemoveTask} />)}
         {openTasks.length === 0 && <EmptyState />}
       </div>
 
@@ -590,7 +590,7 @@ function DeveloperView({
         <details className="completed-group" open>
           <summary><ChevronDown /> Concluídas <span>{completedTasks.length}</span></summary>
           <div className="task-list completed-list">
-            {completedTasks.map((task) => <TaskRow key={task.id} task={task} settings={settings} onMutate={onMutateTask} />)}
+            {completedTasks.map((task) => <TaskRow key={task.id} task={task} clients={clients} settings={settings} onMutate={onMutateTask} />)}
           </div>
         </details>
       )}
@@ -598,11 +598,15 @@ function DeveloperView({
   );
 }
 
-function TaskRow({ task, settings, onMutate, onRemove }: { task: TaskView; settings: WorkspaceSettings; onMutate: (id: string, action: () => Promise<TaskView>, fallback: (task: TaskView) => TaskView) => Promise<void>; onRemove?: (id: string) => Promise<void> }) {
+function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskView; clients: ClientSummary[]; settings: WorkspaceSettings; onMutate: (id: string, action: () => Promise<TaskView>, fallback: (task: TaskView) => TaskView) => Promise<void>; onRemove?: (id: string) => Promise<void> }) {
   const [editingTime, setEditingTime] = useState(false);
   const [timeInput, setTimeInput] = useState("");
   const [editingDescription, setEditingDescription] = useState(false);
   const [descriptionInput, setDescriptionInput] = useState(task.description ?? "");
+  const [editingDueAt, setEditingDueAt] = useState(false);
+  const [dueAtInput, setDueAtInput] = useState("");
+  const [editingClient, setEditingClient] = useState(false);
+  const [clientIdInput, setClientIdInput] = useState(task.clientId);
   const [now, setNow] = useState(0);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -667,6 +671,41 @@ function TaskRow({ task, settings, onMutate, onRemove }: { task: TaskView; setti
     setEditingDescription(false);
   }
 
+  function saveDueAt(event: React.FormEvent) {
+    event.preventDefault();
+    if (!isFutureDeadline(dueAtInput)) return;
+    const dueAt = deadlineInputToIso(dueAtInput);
+    void onMutate(
+      task.id,
+      async () => (await requestJson<{ task: TaskView }>(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ dueAt }),
+      })).task,
+      (current) => ({ ...current, dueAt }),
+    );
+    setEditingDueAt(false);
+  }
+
+  function saveClient(event: React.FormEvent) {
+    event.preventDefault();
+    const client = clients.find((item) => item.id === clientIdInput);
+    if (!client) return;
+    void onMutate(
+      task.id,
+      async () => (await requestJson<{ task: TaskView }>(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ clientId: client.id }),
+      })).task,
+      (current) => ({
+        ...current,
+        clientId: client.id,
+        clientName: client.name,
+        clientColor: client.color,
+      }),
+    );
+    setEditingClient(false);
+  }
+
   async function deleteTask() {
     if (!onRemove || running) return;
     if (!confirmingDelete) {
@@ -698,7 +737,47 @@ function TaskRow({ task, settings, onMutate, onRemove }: { task: TaskView; setti
             {task.description ? <span>{task.description}</span> : <span>Adicionar observação</span>}<Pencil />
           </button>
         )}
-        <div className="task-meta"><span className="client-tag"><i style={{ background: task.clientColor }} />{task.clientName}</span><span className={`level-badge level-${task.complexityLevel}`}>Nível {task.complexityLevel}</span><span className="points">{task.points} pts</span>{task.efficiencyAdjustment !== 0 && <span className={`efficiency-badge ${task.efficiencyAdjustment > 0 ? "positive" : "negative"}`}>{task.efficiencyAdjustment > 0 ? "+" : ""}{task.efficiencyAdjustment}</span>}<span className="sla-label">SLA {formatDuration(task.estimatedDurationSeconds)}</span>{task.dueAt && <span className={`due-label ${!done && new Date(task.dueAt).getTime() < now ? "overdue" : ""}`}><CalendarClock />Prazo {formatDeadline(task.dueAt, settings.timezone)}</span>}</div>
+        <div className="task-meta">
+          {!done && editingClient ? (
+            <form className="task-client-editor" onSubmit={saveClient}>
+              <i style={{ background: clients.find((item) => item.id === clientIdInput)?.color ?? task.clientColor }} />
+              <select autoFocus aria-label={`Novo cliente de ${task.title}`} value={clientIdInput} onChange={(event) => setClientIdInput(event.target.value)}>
+                {clients.map((client) => <option value={client.id} key={client.id}>{client.name}</option>)}
+              </select>
+              <ChevronDown />
+              <button aria-label="Salvar cliente" disabled={!clients.some((client) => client.id === clientIdInput)}><Check /></button>
+              <button type="button" aria-label="Cancelar edição do cliente" onClick={() => { setClientIdInput(task.clientId); setEditingClient(false); }}><X /></button>
+            </form>
+          ) : (
+            <button
+              className="client-tag"
+              disabled={done}
+              onClick={() => { setClientIdInput(task.clientId); setEditingClient(true); }}
+              aria-label={done ? undefined : `Editar cliente de ${task.title}`}
+              title={done ? undefined : "Editar cliente"}
+            ><i style={{ background: task.clientColor }} />{task.clientName}{!done && <Pencil />}</button>
+          )}
+          <span className={`level-badge level-${task.complexityLevel}`}>Nível {task.complexityLevel}</span>
+          <span className="points">{task.points} pts</span>
+          {task.efficiencyAdjustment !== 0 && <span className={`efficiency-badge ${task.efficiencyAdjustment > 0 ? "positive" : "negative"}`}>{task.efficiencyAdjustment > 0 ? "+" : ""}{task.efficiencyAdjustment}</span>}
+          <span className="sla-label">SLA {formatDuration(task.estimatedDurationSeconds)}</span>
+          {!done && editingDueAt ? (
+            <form className="due-editor" onSubmit={saveDueAt}>
+              <CalendarClock />
+              <input autoFocus aria-label={`Novo prazo de ${task.title}`} type="datetime-local" required min={toDateTimeLocalValue(new Date())} value={dueAtInput} onChange={(event) => setDueAtInput(event.target.value)} />
+              <button aria-label="Salvar prazo" disabled={!isFutureDeadline(dueAtInput)}><Check /></button>
+              <button type="button" aria-label="Cancelar edição do prazo" onClick={() => setEditingDueAt(false)}><X /></button>
+            </form>
+          ) : task.dueAt ? (
+            <button
+              className={`due-label ${!done && new Date(task.dueAt).getTime() < now ? "overdue" : ""}`}
+              disabled={done}
+              onClick={() => { setDueAtInput(toDateTimeLocalValue(new Date(task.dueAt!))); setEditingDueAt(true); }}
+              aria-label={done ? undefined : `Editar prazo de ${task.title}`}
+              title={done ? undefined : "Editar prazo e recalcular a prioridade"}
+            ><CalendarClock />Prazo {formatDeadline(task.dueAt, settings.timezone)}{!done && <Pencil />}</button>
+          ) : null}
+        </div>
       </div>
       <div className="task-value"><span>{done ? formatCurrency(calculateAmountCents(task.points, settings.pointValueCents)) : "Estimado"}</span><strong>{task.points} × {formatCurrency(settings.pointValueCents)}</strong></div>
       <div className="timer-control">

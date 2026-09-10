@@ -143,4 +143,82 @@ describe("ordenação das demandas", () => {
       "Tarefa curta",
     ]);
   });
+
+  it("reordena imediatamente quando o prazo é editado", async () => {
+    const base: Omit<TaskView, "id" | "title" | "dueAt"> = {
+      clientId: demoClients[0]!.id,
+      clientName: demoClients[0]!.name,
+      clientColor: demoClients[0]!.color,
+      status: "open",
+      complexityLevel: 2,
+      basePoints: 8,
+      efficiencyAdjustment: 0,
+      points: 8,
+      estimatedDurationSeconds: 3600,
+      completedAt: null,
+      activeTimerStartedAt: null,
+      trackedSeconds: 0,
+      manualDurationSeconds: null,
+      classificationStatus: "classified",
+    };
+
+    render(
+      <TaskManager
+        initialTasks={[
+          { ...base, id: "first", title: "Primeira demanda", dueAt: "2030-04-20T18:00:00.000Z" },
+          { ...base, id: "second", title: "Segunda demanda", dueAt: "2030-04-21T18:00:00.000Z" },
+        ]}
+        clients={demoClients}
+        viewer={demoViewer}
+        initialSettings={demoSettings}
+        demoMode
+      />,
+    );
+
+    expect(screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual([
+      "Primeira demanda",
+      "Segunda demanda",
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Editar prazo de Segunda demanda" }));
+    fireEvent.change(screen.getByLabelText("Novo prazo de Segunda demanda"), {
+      target: { value: "2030-04-18T10:00" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar prazo" }));
+
+    await waitFor(() => expect(screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual([
+      "Segunda demanda",
+      "Primeira demanda",
+    ]));
+  });
+
+  it("troca o cliente da demanda diretamente no card", async () => {
+    const task: TaskView = {
+      id: "task-client",
+      title: "Trocar cliente",
+      clientId: demoClients[0]!.id,
+      clientName: demoClients[0]!.name,
+      clientColor: demoClients[0]!.color,
+      status: "open",
+      complexityLevel: 1,
+      basePoints: 2,
+      efficiencyAdjustment: 0,
+      points: 2,
+      estimatedDurationSeconds: 1800,
+      dueAt: "2030-04-20T18:00:00.000Z",
+      completedAt: null,
+      activeTimerStartedAt: null,
+      trackedSeconds: 0,
+      manualDurationSeconds: null,
+      classificationStatus: "classified",
+    };
+    render(<TaskManager initialTasks={[task]} clients={demoClients} viewer={demoViewer} initialSettings={demoSettings} demoMode />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Editar cliente de Trocar cliente" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Novo cliente de Trocar cliente" }), {
+      target: { value: demoClients[1]!.id },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar cliente" }));
+
+    expect(await screen.findByRole("button", { name: "Editar cliente de Trocar cliente" })).toHaveTextContent(demoClients[1]!.name);
+  });
 });

@@ -60,4 +60,58 @@ describe("PATCH /api/tasks/[taskId]", () => {
     expect(response.status).toBe(400);
     expect(mocks.from).not.toHaveBeenCalled();
   });
+
+  it("persiste um novo prazo futuro", async () => {
+    const dueAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+    const query = { update: vi.fn(), eq: vi.fn() };
+    query.update.mockReturnValue(query);
+    query.eq.mockReturnValueOnce(query).mockResolvedValueOnce({ error: null });
+    mocks.from.mockReturnValue(query);
+    mocks.getTaskView.mockResolvedValue({ id: taskId, dueAt });
+
+    const response = await PATCH(new Request(`http://localhost/api/tasks/${taskId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ dueAt }),
+    }), { params: Promise.resolve({ taskId }) });
+
+    expect(response.status).toBe(200);
+    expect(query.update).toHaveBeenCalledWith({ due_at: dueAt });
+    await expect(response.json()).resolves.toMatchObject({ task: { dueAt } });
+  });
+
+  it("recusa um prazo no passado antes de acessar o banco", async () => {
+    const response = await PATCH(new Request(`http://localhost/api/tasks/${taskId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ dueAt: "2020-01-01T10:00:00.000Z" }),
+    }), { params: Promise.resolve({ taskId }) });
+
+    expect(response.status).toBe(400);
+    expect(mocks.from).not.toHaveBeenCalled();
+  });
+
+  it("valida e troca o cliente dentro da mesma agência", async () => {
+    const clientId = "55555555-5555-4555-8555-555555555555";
+    const clientsQuery = { select: vi.fn(), eq: vi.fn(), maybeSingle: vi.fn() };
+    clientsQuery.select.mockReturnValue(clientsQuery);
+    clientsQuery.eq.mockReturnValue(clientsQuery);
+    clientsQuery.maybeSingle.mockResolvedValue({ data: { id: clientId }, error: null });
+    const tasksQuery = { update: vi.fn(), eq: vi.fn() };
+    tasksQuery.update.mockReturnValue(tasksQuery);
+    tasksQuery.eq.mockReturnValueOnce(tasksQuery).mockResolvedValueOnce({ error: null });
+    mocks.from.mockImplementation((table: string) => table === "clients" ? clientsQuery : tasksQuery);
+    mocks.getTaskView.mockResolvedValue({ id: taskId, clientId, clientName: "Novo Cliente" });
+
+    const response = await PATCH(new Request(`http://localhost/api/tasks/${taskId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ clientId }),
+    }), { params: Promise.resolve({ taskId }) });
+
+    expect(response.status).toBe(200);
+    expect(clientsQuery.eq).toHaveBeenCalledWith("agency_id", "22222222-2222-4222-8222-222222222222");
+    expect(clientsQuery.eq).toHaveBeenCalledWith("active", true);
+    expect(tasksQuery.update).toHaveBeenCalledWith({ client_id: clientId });
+  });
 });
