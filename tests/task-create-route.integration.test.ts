@@ -53,7 +53,7 @@ describe("POST /api/tasks", () => {
     const tasks = taskQuery();
     const dueAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     mocks.from.mockReturnValueOnce(clients).mockReturnValueOnce(tasks);
-    mocks.classifyTask.mockResolvedValue({ complexityLevel: 2, basePoints: 8, efficiencyAdjustment: 0, finalPoints: 8, rationale: "Setup moderado.", model: "gemini-3.6-flash" });
+    mocks.classifyTask.mockResolvedValue({ complexityLevel: 2, basePoints: 8, efficiencyAdjustment: 0, finalPoints: 8, rationale: "Setup moderado.", model: "gemini-3.6-flash", estimatedDurationSeconds: 7200, estimateSource: "user" });
     mocks.getTaskView.mockResolvedValue({ id: "44444444-4444-4444-8444-444444444444", dueAt });
 
     const response = await POST(new Request("http://localhost/api/tasks", {
@@ -68,8 +68,38 @@ describe("POST /api/tasks", () => {
     }));
 
     expect(response.status).toBe(201);
-    expect(tasks.insert).toHaveBeenCalledWith(expect.objectContaining({ due_at: dueAt }));
+    expect(tasks.insert).toHaveBeenCalledWith(expect.objectContaining({ due_at: dueAt, estimated_duration_seconds: 7200 }));
     expect(mocks.getTaskView).toHaveBeenCalledWith("44444444-4444-4444-8444-444444444444");
+  });
+
+  it("usa a estimativa calculada pelo Jarvis quando o SLA não é informado", async () => {
+    const clients = clientQuery();
+    const tasks = taskQuery();
+    const dueAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    mocks.from.mockReturnValueOnce(clients).mockReturnValueOnce(tasks);
+    mocks.classifyTask.mockResolvedValue({ complexityLevel: 2, basePoints: 10, efficiencyAdjustment: 0, finalPoints: 10, rationale: "Estimativa automática.", model: "gemini-3.6-flash", estimatedDurationSeconds: 10_800, estimateSource: "jarvis" });
+    mocks.getTaskView.mockResolvedValue({ id: "44444444-4444-4444-8444-444444444444", dueAt });
+
+    const response = await POST(new Request("http://localhost/api/tasks", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        title: "Configurar eventos avançados do GA4",
+        clientId: "33333333-3333-4333-8333-333333333333",
+        estimatedDurationSeconds: null,
+        dueAt,
+      }),
+    }));
+
+    expect(response.status).toBe(201);
+    expect(mocks.classifyTask).toHaveBeenCalledWith({
+      title: "Configurar eventos avançados do GA4",
+      estimatedDurationSeconds: null,
+    });
+    expect(tasks.insert).toHaveBeenCalledWith(expect.objectContaining({
+      estimated_duration_seconds: 10_800,
+      classification_metadata: expect.objectContaining({ estimated_duration_source: "jarvis" }),
+    }));
   });
 
   it("recusa prazo no passado antes de classificar a tarefa", async () => {

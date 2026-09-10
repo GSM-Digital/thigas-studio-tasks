@@ -12,6 +12,7 @@ describe("avaliação do Jarvis", () => {
       clientWith({
         nivel_complexidade: 2,
         pontos_base: 10,
+        prazo_estimado_segundos: 7200,
         bonus_ou_penalidade: "+1",
         pontuacao_final: 11,
         justificativa: "Configuração moderada concluída muito abaixo do prazo estimado.",
@@ -25,10 +26,13 @@ describe("avaliação do Jarvis", () => {
       efficiencyAdjustment: 4,
       finalPoints: 14,
       model: "gemini-3.6-flash",
+      estimatedDurationSeconds: 7200,
+      estimateSource: "user",
     });
     expect(toJarvisOutput(classification)).toMatchObject({
       nivel_complexidade: 2,
       pontos_base: 10,
+      prazo_estimado_segundos: 7200,
       bonus_ou_penalidade: "+4",
       pontuacao_final: 14,
     });
@@ -40,6 +44,7 @@ describe("avaliação do Jarvis", () => {
       clientWith({
         nivel_complexidade: 2,
         pontos_base: 12,
+        prazo_estimado_segundos: 7200,
         bonus_ou_penalidade: "+0",
         pontuacao_final: 12,
         justificativa: "Implementação moderada sem tempo real informado até o momento.",
@@ -52,6 +57,7 @@ describe("avaliação do Jarvis", () => {
     const client = clientWith({
       nivel_complexidade: 1,
       pontos_base: 50,
+      prazo_estimado_segundos: 1800,
       bonus_ou_penalidade: "+0",
       pontuacao_final: 50,
       justificativa: "Pontuação propositalmente incompatível para validar o contrato.",
@@ -61,5 +67,26 @@ describe("avaliação do Jarvis", () => {
       client,
       "test-model",
     )).rejects.toThrow("faixa");
+  });
+
+  it("estima e arredonda o SLA quando o usuário deixa o campo vazio", async () => {
+    const classification = await classifyTask(
+      { title: "Configurar GA4" },
+      clientWith({
+        nivel_complexidade: 2,
+        pontos_base: 10,
+        prazo_estimado_segundos: 3700,
+        bonus_ou_penalidade: "+0",
+        pontuacao_final: 10,
+        justificativa: "Configuração moderada com implementação e validação dos eventos de rastreamento.",
+      }),
+      "test-model",
+    );
+
+    expect(classification).toMatchObject({
+      estimatedDurationSeconds: 3600,
+      estimateSource: "jarvis",
+      finalPoints: 10,
+    });
   });
 });

@@ -11,6 +11,7 @@ import type { TaskClassification } from "@/lib/types";
 export const jarvisOutputSchema = z.object({
   nivel_complexidade: z.number().int().min(1).max(4),
   pontos_base: z.number().int().min(1).max(100),
+  prazo_estimado_segundos: z.number().int().min(900).max(1_440_000),
   bonus_ou_penalidade: z.string().regex(/^[+-]\d+$/),
   pontuacao_final: z.number().int().min(1).max(140),
   justificativa: z.string().min(20).max(600),
@@ -20,9 +21,14 @@ export type JarvisOutput = z.infer<typeof jarvisOutputSchema>;
 
 export interface ClassificationInput {
   title: string;
-  estimatedDurationSeconds: number;
+  estimatedDurationSeconds?: number | null;
   actualDurationSeconds?: number | null;
 }
+
+export type ClassifiedTask = TaskClassification & {
+  estimatedDurationSeconds: number;
+  estimateSource: "user" | "jarvis";
+};
 
 export const JARVIS_EVALUATION_GUIDE = `Você é Jarvis, um Gerente de Projetos de Tecnologia e Avaliador de Produtividade sênior. Sua função é calcular a pontuação final de tarefas de um Desenvolvedor Web em duas etapas: complexidade técnica e impacto (pontos base), seguida do fator de eficiência (comparação entre prazo estimado/SLA e tempo real gasto).
 
@@ -43,7 +49,13 @@ Seja rigoroso, considere risco, dependências, ambiguidade e esforço. Escreva a
 
 export const JARVIS_SYSTEM_PROMPT = `${JARVIS_EVALUATION_GUIDE}
 
-Retorne APENAS um objeto JSON válido com exatamente: "nivel_complexidade", "pontos_base", "bonus_ou_penalidade", "pontuacao_final" e "justificativa".`;
+ESTIMATIVA DE EXECUÇÃO
+- Retorne em prazo_estimado_segundos o tempo médio de trabalho focado de um Desenvolvedor Web sênior para executar e validar a tarefa.
+- Quando o usuário fornecer o prazo estimado, repita esse valor. Quando estiver "não informado", estime-o com base no escopo técnico descrito.
+- Use incrementos de 15 minutos, com mínimo de 900 segundos e máximo de 1.440.000 segundos.
+- Não confunda o prazo estimado de execução com a data limite de entrega.
+
+Retorne APENAS um objeto JSON válido com exatamente: "nivel_complexidade", "pontos_base", "prazo_estimado_segundos", "bonus_ou_penalidade", "pontuacao_final" e "justificativa".`;
 
 export type ClassifierClient = StructuredGenerationClient;
 
@@ -53,6 +65,7 @@ const jarvisOutputJsonSchema = {
   propertyOrdering: [
     "nivel_complexidade",
     "pontos_base",
+    "prazo_estimado_segundos",
     "bonus_ou_penalidade",
     "pontuacao_final",
     "justificativa",
@@ -60,6 +73,7 @@ const jarvisOutputJsonSchema = {
   required: [
     "nivel_complexidade",
     "pontos_base",
+    "prazo_estimado_segundos",
     "bonus_ou_penalidade",
     "pontuacao_final",
     "justificativa",
@@ -67,6 +81,7 @@ const jarvisOutputJsonSchema = {
   properties: {
     nivel_complexidade: { type: "integer", minimum: 1, maximum: 4 },
     pontos_base: { type: "integer", minimum: 1, maximum: 100 },
+    prazo_estimado_segundos: { type: "integer", minimum: 900, maximum: 1_440_000 },
     bonus_ou_penalidade: { type: "string" },
     pontuacao_final: { type: "integer", minimum: 1, maximum: 140 },
     justificativa: { type: "string" },
@@ -77,14 +92,15 @@ export async function classifyTask(
   input: ClassificationInput,
   client: ClassifierClient = createGeminiStructuredClient(),
   model = getServerEnv().GEMINI_CLASSIFICATION_MODEL,
-): Promise<TaskClassification> {
+): Promise<ClassifiedTask> {
   const actualDuration = input.actualDurationSeconds ?? null;
+  const providedEstimate = input.estimatedDurationSeconds ?? null;
   const output = await client.generateStructured({
     model,
     systemInstruction: JARVIS_SYSTEM_PROMPT,
     prompt: [
       `Tarefa: ${input.title}`,
-      `Prazo Estimado: ${formatDuration(input.estimatedDurationSeconds)}`,
+      `Prazo Estimado: ${providedEstimate ? formatDuration(providedEstimate) : "não informado — estime o tempo médio"}`,
       `Tempo Real Gasto: ${actualDuration && actualDuration > 0 ? formatDuration(actualDuration) : "não informado"}`,
     ].join("\n"),
     responseJsonSchema: jarvisOutputJsonSchema,
@@ -97,9 +113,14 @@ export async function classifyTask(
     throw new Error("A pontuação base retornada não pertence à faixa do nível informado.");
   }
 
+  const estimatedDurationSeconds = providedEstimate ?? Math.max(
+    900,
+    Math.min(1_440_000, Math.round(parsed.prazo_estimado_segundos / 900) * 900),
+  );
+
   const efficiency = calculateEfficiencyScore(
     parsed.pontos_base,
-    input.estimatedDurationSeconds,
+    estimatedDurationSeconds,
     actualDuration,
   );
 
@@ -110,13 +131,16 @@ export async function classifyTask(
     finalPoints: efficiency.finalPoints,
     rationale: parsed.justificativa,
     model,
+    estimatedDurationSeconds,
+    estimateSource: providedEstimate ? "user" : "jarvis",
   };
 }
 
-export function toJarvisOutput(classification: TaskClassification): JarvisOutput {
+export function toJarvisOutput(classification: ClassifiedTask): JarvisOutput {
   return {
     nivel_complexidade: classification.complexityLevel,
     pontos_base: classification.basePoints,
+    prazo_estimado_segundos: classification.estimatedDurationSeconds,
     bonus_ou_penalidade: `${classification.efficiencyAdjustment >= 0 ? "+" : ""}${classification.efficiencyAdjustment}`,
     pontuacao_final: classification.finalPoints,
     justificativa: classification.rationale,

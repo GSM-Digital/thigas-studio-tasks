@@ -441,9 +441,12 @@ function DeveloperView({
 }) {
   const [title, setTitle] = useState("");
   const [clientId, setClientId] = useState(clients[0]?.id ?? "");
-  const [estimatedHours, setEstimatedHours] = useState("8");
+  const [estimatedHours, setEstimatedHours] = useState("");
   const [dueAt, setDueAt] = useState(createDefaultDeadline);
   const [adding, setAdding] = useState(false);
+  const hasInvalidEstimate = estimatedHours.trim() !== "" && (
+    !Number.isFinite(Number(estimatedHours)) || Number(estimatedHours) <= 0
+  );
   const openTasks = tasks.filter((task) => task.status !== "completed" && task.status !== "approved");
   const completedTasks = tasks.filter((task) => task.status === "completed" || task.status === "approved");
   const todayCompleted = allTasks.filter((task) => task.completedAt?.slice(0, 10) === new Date().toISOString().slice(0, 10)).length;
@@ -454,8 +457,14 @@ function DeveloperView({
   async function addTask(event: React.FormEvent) {
     event.preventDefault();
     const cleanTitle = title.trim();
-    const estimatedDurationSeconds = Math.round(Number(estimatedHours) * 3600);
-    if (!cleanTitle || !effectiveClientId || !Number.isInteger(estimatedDurationSeconds) || estimatedDurationSeconds <= 0) return;
+    const estimatedDurationSeconds = estimatedHours.trim()
+      ? Math.round(Number(estimatedHours) * 3600)
+      : null;
+    if (
+      !cleanTitle ||
+      !effectiveClientId ||
+      (estimatedDurationSeconds !== null && (!Number.isInteger(estimatedDurationSeconds) || estimatedDurationSeconds <= 0))
+    ) return;
     let dueAtIso: string;
     try {
       dueAtIso = deadlineInputToIso(dueAt);
@@ -468,10 +477,11 @@ function DeveloperView({
       let created: TaskView;
       if (demoMode) {
         const client = clients.find((item) => item.id === effectiveClientId)!;
+        const demoEstimatedDurationSeconds = estimatedDurationSeconds ?? 8 * 3600;
         created = {
           id: crypto.randomUUID(), title: cleanTitle, clientId: effectiveClientId, clientName: client.name,
           clientColor: client.color, status: "open", complexityLevel: 2,
-          basePoints: 8, efficiencyAdjustment: 0, points: 8, estimatedDurationSeconds,
+          basePoints: 8, efficiencyAdjustment: 0, points: 8, estimatedDurationSeconds: demoEstimatedDurationSeconds,
           dueAt: dueAtIso, completedAt: null, activeTimerStartedAt: null, trackedSeconds: 0,
           manualDurationSeconds: null, classificationStatus: "classified",
         };
@@ -482,7 +492,11 @@ function DeveloperView({
         created = result.task;
       }
       onTasksChange((current) => [created, ...current]);
+      if (estimatedDurationSeconds === null) {
+        onNotice(`Jarvis estimou o SLA em ${formatDuration(created.estimatedDurationSeconds)}.`);
+      }
       setTitle("");
+      setEstimatedHours("");
       setDueAt(createDefaultDeadline());
     } catch (error) {
       onNotice(error instanceof Error ? error.message : "Não foi possível criar a tarefa.");
@@ -508,9 +522,9 @@ function DeveloperView({
             {clients.map((client) => <option value={client.id} key={client.id}>{client.name}</option>)}
           </select><ChevronDown />
         </div>
-        <label className="estimate-input-wrap"><Clock3 /><input aria-label="Prazo estimado em horas" type="number" min="0.25" max="99999" step="0.25" value={estimatedHours} onChange={(event) => setEstimatedHours(event.target.value)} /><span>h</span></label>
+        <label className="estimate-input-wrap" title="Opcional: deixe vazio para o Jarvis estimar"><Clock3 /><input aria-label="Prazo estimado em horas" type="number" min="0.25" max="99999" step="0.25" placeholder="Auto" value={estimatedHours} onChange={(event) => setEstimatedHours(event.target.value)} /><span>h</span></label>
         <label className="deadline-input-wrap" title="Data e hora limite para concluir a tarefa"><CalendarClock /><input aria-label="Data e hora do prazo" type="datetime-local" required min={toDateTimeLocalValue(new Date())} value={dueAt} onChange={(event) => setDueAt(event.target.value)} /></label>
-        <button className="add-button" type="submit" disabled={adding || !title.trim() || !effectiveClientId || Number(estimatedHours) <= 0 || !isFutureDeadline(dueAt)}>{adding ? <LoaderCircle className="spin" /> : <><Sparkles /> Adicionar</>}</button>
+        <button className="add-button" type="submit" disabled={adding || !title.trim() || !effectiveClientId || hasInvalidEstimate || !isFutureDeadline(dueAt)}>{adding ? <LoaderCircle className="spin" /> : <><Sparkles /> Adicionar</>}</button>
       </form>
 
       <div className="list-toolbar"><span>{openTasks.length} pendentes</span><button><SlidersHorizontal /> Filtrar</button></div>

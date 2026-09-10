@@ -79,7 +79,7 @@ select cron.schedule(
 
 ## 3. Componente principal da UI
 
-`components/task-manager.tsx` contém a lista minimalista, checkboxes circulares, quick-add com SLA em horas e prazo de entrega com data/hora, filtro e gerenciador de clientes, cronômetro em tempo real, edição `HH:MM:SS`, valores em BRL, light/dark mode e layouts responsivos.
+`components/task-manager.tsx` contém a lista minimalista, checkboxes circulares, quick-add com SLA opcional em horas e prazo de entrega com data/hora, filtro e gerenciador de clientes, cronômetro em tempo real, edição `HH:MM:SS`, valores em BRL, light/dark mode e layouts responsivos. Quando o SLA fica vazio, o Jarvis estima o tempo médio de execução em incrementos de 15 minutos antes de salvar a demanda; qualquer valor digitado pelo usuário tem prioridade.
 
 - **Desenvolvedor:** cria, conclui/reabre, inicia/para, corrige o tempo e exclui tarefas em aberto com confirmação.
 - **Clientes:** o botão `+` ao lado de CLIENTES — ou “Gerenciar clientes” — abre o cadastro para adicionar, renomear, trocar a cor ou remover clientes.
@@ -112,6 +112,7 @@ Resposta:
 {
   "nivel_complexidade": 2,
   "pontos_base": 10,
+  "prazo_estimado_segundos": 7200,
   "bonus_ou_penalidade": "+0",
   "pontuacao_final": 10,
   "justificativa": "A configuração exige ferramentas externas e validação técnica. O tempo permaneceu dentro do SLA."

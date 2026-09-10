@@ -8,7 +8,7 @@ import { getTaskView } from "@/lib/task-view";
 const createTaskSchema = z.object({
   title: z.string().trim().min(3).max(240),
   clientId: z.uuid(),
-  estimatedDurationSeconds: z.number().int().positive().max(359_999_999),
+  estimatedDurationSeconds: z.number().int().positive().max(359_999_999).nullable().optional(),
   dueAt: z.string().datetime({ offset: true }).refine(
     (value) => new Date(value).getTime() > Date.now(),
     "O prazo deve estar no futuro.",
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
     try {
       classification = await classifyTask({
         title: input.title,
-        estimatedDurationSeconds: input.estimatedDurationSeconds,
+        estimatedDurationSeconds: input.estimatedDurationSeconds ?? null,
       });
     } catch (error) {
       console.error("Task classification failed", error);
@@ -53,13 +53,14 @@ export async function POST(request: Request) {
         base_points: classification.basePoints,
         efficiency_adjustment: classification.efficiencyAdjustment,
         points: classification.finalPoints,
-        estimated_duration_seconds: input.estimatedDurationSeconds,
+        estimated_duration_seconds: classification.estimatedDurationSeconds,
         due_at: input.dueAt,
         classification_status: "classified",
         ai_model: classification.model,
         classification_metadata: {
           analyst: "Jarvis",
           justification: classification.rationale,
+          estimated_duration_source: classification.estimateSource,
         },
       })
       .select("id")
