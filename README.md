@@ -30,7 +30,7 @@ components/
 └── task-manager.tsx                    # UI principal e as duas visões
 lib/
 ├── ai/classifier.ts                    # prompt/Structured Output do Jarvis
-├── ai/completion-evaluator.ts          # bônus pelo relato de execução
+├── ai/completion-evaluator.ts          # bônus/penalidade pelo relato de execução
 ├── ai/jarvis-chat.ts                   # interpretação conversacional validada
 ├── ai/reevaluate-task.ts               # reavaliação ao concluir/corrigir tempo
 ├── clients/resolve.ts                  # encontra ou cria clientes com proteção contra duplicidade
@@ -87,7 +87,7 @@ select cron.schedule(
 - **Prioridade inteligente:** as pendências são ordenadas pelo último momento seguro para começar (`prazo − duração estimada ajustada ao risco`). A margem adicional é de 0% no nível 1, 15% no nível 2, 30% no nível 3 e 50% no nível 4. Ao editar o prazo, a lista é recalculada e reordenada imediatamente. Prazos ausentes ou inválidos ficam no fim.
 - **Clientes:** o botão `+` ao lado de CLIENTES — ou “Gerenciar clientes” — abre o cadastro para adicionar, renomear, trocar a cor ou remover clientes.
 - **Agência:** consulta o ciclo, totalizações e entregas por cliente; a única mutação disponível é aprovar uma entrega concluída.
-- **Jarvis:** o botão no cabeçalho abre um chat que transforma uma solicitação em tarefa. Ele estima o tempo quando necessário e cadastra automaticamente um cliente explicitamente mencionado que ainda não exista. O prazo de entrega nunca é inventado: se faltar data ou hora, ele pergunta ao usuário.
+- **Jarvis:** o botão no cabeçalho abre um chat que transforma uma solicitação em tarefa. O compositor aceita digitação ou ditado por microfone em português nos navegadores compatíveis, mantendo a transcrição editável antes do envio. Ele estima o tempo quando necessário e cadastra automaticamente um cliente explicitamente mencionado que ainda não exista. O prazo de entrega nunca é inventado: se faltar data ou hora, ele pergunta ao usuário.
 - **PDF:** o botão “Salvar PDF” aplica uma folha de impressão dedicada e abre o diálogo nativo do navegador.
 - **Tabela:** exportação CSV UTF-8 com separador compatível com Excel pt-BR.
 
@@ -123,11 +123,11 @@ Resposta:
 }
 ```
 
-O Jarvis usa saída JSON estruturada do Gemini, validação com Zod, timeout de 12 s e até duas novas tentativas para falhas transitórias. O modelo define nível/pontos base e redige a justificativa; o servidor recalcula o fator de eficiência deterministicamente, impedindo divergências financeiras. Sem tempo real, a pontuação inicial é igual aos pontos base. Ao concluir, o relato fica salvo para consulta futura e passa por uma segunda rubrica: o Jarvis avalia somente mérito técnico adicional comprovado, enquanto o servidor transforma o percentual permitido em pontos.
+O Jarvis usa saída JSON estruturada do Gemini, validação com Zod, timeout de 12 s e até duas novas tentativas para falhas transitórias. O modelo define nível/pontos base e redige a justificativa; o servidor recalcula o fator de eficiência deterministicamente, impedindo divergências financeiras. Sem tempo real, a pontuação inicial é igual aos pontos base. Ao concluir, o relato fica salvo para consulta futura e passa por uma segunda rubrica: o Jarvis avalia autoria, qualidade, cumprimento do escopo e retrabalho, enquanto o servidor transforma o percentual permitido em pontos.
 
 O chat usa `POST /api/jarvis/chat`. A conversa recente é enviada sem a chave da API sair do servidor. Quando os três dados obrigatórios — tarefa, cliente identificável e data/hora de entrega — estão completos, o servidor valida a saída estruturada, estima o SLA ausente, encontra ou cadastra o cliente e grava a tarefa no Supabase. Nomes novos só são aceitos quando aparecem explicitamente na demanda; duplicidades por caixa/espaços e criações concorrentes são tratadas antes da persistência.
 
-As faixas são: nível 1 = 1–4, nível 2 = 5–15, nível 3 = 20–35 e nível 4 = 50–100 pontos base. O ajuste de tempo varia de +20% a +40%; atrasos recebem penalidade de -20% a -50%. Separadamente, o relato pode gerar bônus de execução de 0%, 5%, 10%, 15% ou 20%: execução rotineira e retrabalho próprio ficam em 0%, enquanto imprevistos externos e riscos relevantes efetivamente resolvidos podem gerar bônus. Essa etapa nunca aplica penalidade. A chave do Gemini nunca é enviada ao navegador. O modelo `gemini-3.6-flash`, com raciocínio mínimo, foi escolhido pelo equilíbrio entre qualidade, baixa latência e custo; altere `GEMINI_CLASSIFICATION_MODEL` sem mudança de código.
+As faixas são: nível 1 = 1–4, nível 2 = 5–15, nível 3 = 20–35 e nível 4 = 50–100 pontos base. O ajuste de tempo varia de +20% a +40%; atrasos recebem penalidade de -20% a -50%. Separadamente, o relato pode gerar ajuste de execução entre -100% e +20%: pequenas falhas começam em -10%, entregas incompletas ou com retrabalho variam de -20% a -40%, requisitos ignorados de -30% a -50%, execução majoritária por terceiros de -50% a -80% e ausência de execução pelo desenvolvedor recebe -100%. Imprevistos externos e riscos relevantes efetivamente resolvidos podem gerar +5% a +20%. O uso responsável de IA, automação ou ferramentas é neutro; se houver penalidade de execução, qualquer bônus positivo de velocidade é suprimido. A pontuação final nunca fica abaixo de zero. A chave do Gemini nunca é enviada ao navegador. O modelo `gemini-3.6-flash`, com raciocínio mínimo, foi escolhido pelo equilíbrio entre qualidade, baixa latência e custo; altere `GEMINI_CLASSIFICATION_MODEL` sem mudança de código.
 
 ## 5. Gerador de relatórios
 
@@ -144,7 +144,7 @@ npm run lint
 npm run build
 ```
 
-Os testes cobrem faixas de pontos, todas as bandas de eficiência, bônus do relato de conclusão, modal de fechamento, aritmética monetária, parse/edição de tempo, observações, timer ativo, Structured Outputs, conversa do Jarvis, resolução/criação automática de clientes, criação de tarefa pelo chat, contrato HTTP em português, limite de período, agrupamento e CSV.
+Os testes cobrem faixas de pontos, todas as bandas de eficiência, bônus e penalidades do relato de conclusão, modal de fechamento, aritmética monetária, parse/edição de tempo, observações, timer ativo, Structured Outputs, conversa do Jarvis, resolução/criação automática de clientes, criação de tarefa pelo chat, contrato HTTP em português, limite de período, agrupamento e CSV.
 
 Para validar o schema localmente, tenha Docker ativo e execute:
 

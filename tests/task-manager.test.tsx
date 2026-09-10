@@ -268,6 +268,37 @@ describe("favicon do cronômetro", () => {
 });
 
 describe("fechamento assistido pelo Jarvis", () => {
+  it("exibe uma penalidade de execução no card concluído", () => {
+    const task: TaskView = {
+      id: "penalized-task",
+      title: "Implementar página institucional",
+      description: null,
+      completionSummary: "A página ficou incompleta e precisa de retrabalho antes da publicação.",
+      completionRationale: "A entrega está incompleta e exige retrabalho relevante.",
+      clientId: demoClients[0]!.id,
+      clientName: demoClients[0]!.name,
+      clientColor: demoClients[0]!.color,
+      status: "completed",
+      complexityLevel: 3,
+      basePoints: 25,
+      efficiencyAdjustment: 0,
+      executionAdjustment: -10,
+      points: 15,
+      estimatedDurationSeconds: 14_400,
+      dueAt: "2030-04-20T18:00:00.000Z",
+      completedAt: "2030-04-18T12:00:00.000Z",
+      activeTimerStartedAt: null,
+      trackedSeconds: 14_400,
+      manualDurationSeconds: null,
+      classificationStatus: "classified",
+    };
+
+    render(<TaskManager initialTasks={[task]} clients={demoClients} viewer={demoViewer} initialSettings={demoSettings} demoMode />);
+
+    expect(screen.getByText("-10 execução")).toHaveClass("negative");
+    expect(screen.getByText("15 pts")).toBeVisible();
+  });
+
   it("exige um relato antes de concluir e exibe o registro na tarefa", async () => {
     const task: TaskView = {
       id: "task-to-complete",
@@ -308,5 +339,52 @@ describe("fechamento assistido pelo Jarvis", () => {
     expect(screen.getByRole("button", { name: "Reabrir tarefa" })).toBeVisible();
     expect(screen.getByText(summary)).toBeVisible();
     expect(screen.getByText(/Jarvis: A execução seguiu o escopo esperado/)).toBeVisible();
+  });
+
+  it("permite reavaliar uma conclusão quando a avaliação anterior falhou", async () => {
+    const failedTask: TaskView = {
+      id: "failed-evaluation",
+      title: "Implementar formulário LP",
+      description: null,
+      completionSummary: "Implementei o formulário e validei o envio dos dados no ambiente final.",
+      completionRationale: null,
+      clientId: demoClients[0]!.id,
+      clientName: demoClients[0]!.name,
+      clientColor: demoClients[0]!.color,
+      status: "completed",
+      complexityLevel: 2,
+      basePoints: 10,
+      efficiencyAdjustment: 3,
+      executionAdjustment: 0,
+      points: 13,
+      estimatedDurationSeconds: 5400,
+      dueAt: "2030-04-20T18:00:00.000Z",
+      completedAt: "2030-04-18T14:30:00.000Z",
+      activeTimerStartedAt: null,
+      trackedSeconds: 1721,
+      manualDurationSeconds: null,
+      classificationStatus: "failed",
+    };
+    const evaluatedTask: TaskView = {
+      ...failedTask,
+      classificationStatus: "classified",
+      completionRationale: "A entrega foi concluída e validada, sem evidência de esforço adicional.",
+    };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(
+      JSON.stringify({ task: evaluatedTask }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    ));
+
+    render(<TaskManager initialTasks={[failedTask]} clients={demoClients} viewer={demoViewer} initialSettings={demoSettings} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Reavaliar com Jarvis" }));
+
+    expect(screen.getByRole("button", { name: "Reavaliando..." })).toBeDisabled();
+    await waitFor(() => expect(screen.getByText(/Jarvis: A entrega foi concluída e validada/)).toBeVisible());
+    expect(screen.queryByRole("button", { name: "Reavaliar com Jarvis" })).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/tasks/failed-evaluation/reevaluate",
+      expect.objectContaining({ method: "POST" }),
+    );
   });
 });

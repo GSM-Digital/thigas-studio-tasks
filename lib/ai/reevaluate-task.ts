@@ -14,7 +14,7 @@ export async function reevaluateCompletedTask(taskId: string, agencyId: string):
   if (error || !task) throw new Error("Tarefa indisponível para avaliação do Jarvis.");
   const actualDurationSeconds = task.manual_duration_seconds ?? task.tracked_seconds;
   if (!task.completion_summary) throw new Error("O relato de conclusão é obrigatório para a avaliação do Jarvis.");
-  const efficiency = calculateEfficiencyScore(
+  const calculatedEfficiency = calculateEfficiencyScore(
     task.base_points,
     task.estimated_duration_seconds,
     actualDurationSeconds,
@@ -27,7 +27,10 @@ export async function reevaluateCompletedTask(taskId: string, agencyId: string):
     estimatedDurationSeconds: task.estimated_duration_seconds,
     actualDurationSeconds,
   });
-  const finalPoints = task.base_points + efficiency.adjustment + completion.adjustment;
+  const suppressEfficiencyBonus = completion.percentage < 0 && calculatedEfficiency.adjustment > 0;
+  const efficiencyAdjustment = suppressEfficiencyBonus ? 0 : calculatedEfficiency.adjustment;
+  const efficiencyPercentage = suppressEfficiencyBonus ? 0 : calculatedEfficiency.percentage;
+  const finalPoints = Math.max(0, task.base_points + efficiencyAdjustment + completion.adjustment);
   const previousMetadata = task.classification_metadata && typeof task.classification_metadata === "object" && !Array.isArray(task.classification_metadata)
     ? task.classification_metadata
     : {};
@@ -35,7 +38,7 @@ export async function reevaluateCompletedTask(taskId: string, agencyId: string):
   const { error: updateError } = await supabase
     .from("tasks")
     .update({
-      efficiency_adjustment: efficiency.adjustment,
+      efficiency_adjustment: efficiencyAdjustment,
       execution_adjustment: completion.adjustment,
       completion_rationale: completion.rationale,
       points: finalPoints,
@@ -45,8 +48,10 @@ export async function reevaluateCompletedTask(taskId: string, agencyId: string):
         ...previousMetadata,
         analyst: "Jarvis",
         completion_justification: completion.rationale,
-        execution_bonus_percentage: completion.percentage,
-        efficiency_percentage: efficiency.percentage,
+        execution_adjustment_percentage: completion.percentage,
+        efficiency_percentage: efficiencyPercentage,
+        calculated_efficiency_percentage: calculatedEfficiency.percentage,
+        efficiency_bonus_suppressed: suppressEfficiencyBonus,
         evaluated_actual_seconds: actualDurationSeconds,
       },
     })

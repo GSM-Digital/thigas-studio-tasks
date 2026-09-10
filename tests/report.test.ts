@@ -27,4 +27,26 @@ describe("relatório de faturamento", () => {
     expect(csv.startsWith("\uFEFF")).toBe(true);
     expect(csv).toContain("Make One;GA4");
   });
+
+  it("mantém no relatório uma tarefa zerada por penalidade integral", () => {
+    const zeroed = generateBillingReport({
+      tasks: [{
+        id: "zero",
+        title: "Entrega não executada pelo responsável",
+        clientId: "a",
+        clientName: "Make One",
+        completedAt: "2026-09-02T12:00:00.000Z",
+        points: 0,
+        trackedSeconds: 300,
+        manualDurationSeconds: null,
+      }],
+      periodStart: "2026-08-15T00:00:00.000Z",
+      periodEnd: "2026-09-15T00:00:00.000Z",
+      pointValueCents: 400,
+    });
+
+    expect(zeroed.clients[0]?.tasks[0]).toMatchObject({ points: 0, amountCents: 0 });
+    expect(zeroed.totalPoints).toBe(0);
+    expect(zeroed.totalAmountCents).toBe(0);
+  });
 });

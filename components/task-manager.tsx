@@ -11,12 +11,14 @@ import {
   LayoutDashboard,
   ListTodo,
   LoaderCircle,
+  Mic,
   Moon,
   MoreHorizontal,
   Pause,
   Pencil,
   Play,
   Plus,
+  RefreshCw,
   Search,
   Send,
   Settings,
@@ -42,6 +44,7 @@ import { calculateAmountCents, calculateEfficiencyScore, formatCurrency } from "
 import { sortTasksByUrgency } from "@/lib/domain/priority";
 import { effectiveDuration, formatDuration, parseDuration } from "@/lib/domain/time";
 import { generateBillingReport, reportToCsv } from "@/lib/reports/generate";
+import { useSpeechDictation } from "@/lib/browser/use-speech-dictation";
 import type {
   AppRole,
   ClientSummary,
@@ -379,6 +382,7 @@ function JarvisPanel({
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const messagesEnd = useRef<HTMLDivElement>(null);
+  const speech = useSpeechDictation({ value: input, onChange: setInput, language: "pt-BR", maxLength: 800 });
 
   useEffect(() => {
     messagesEnd.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -387,7 +391,7 @@ function JarvisPanel({
   async function sendMessage(event: React.FormEvent) {
     event.preventDefault();
     const content = input.trim();
-    if (!content || sending) return;
+    if (!content || sending || speech.listening) return;
 
     const userMessage: JarvisUiMessage = {
       id: crypto.randomUUID(),
@@ -435,14 +439,19 @@ function JarvisPanel({
     }
   }
 
+  function closePanel() {
+    speech.cancel();
+    onClose();
+  }
+
   if (!open) return null;
 
   return (
-    <div className="drawer-backdrop" onMouseDown={onClose}>
+    <div className="drawer-backdrop" onMouseDown={closePanel}>
       <aside className="jarvis-drawer" onMouseDown={(event) => event.stopPropagation()} aria-label="Conversa com Jarvis">
         <div className="jarvis-head">
           <div className="jarvis-identity"><span><Sparkles /></span><div><strong>Jarvis</strong><small>Analista de demandas</small></div></div>
-          <button onClick={onClose} aria-label="Fechar Jarvis"><X /></button>
+          <button onClick={closePanel} aria-label="Fechar Jarvis"><X /></button>
         </div>
         <div className="jarvis-messages" aria-live="polite">
           {messages.map((message) => (
@@ -458,6 +467,7 @@ function JarvisPanel({
           <textarea
             aria-label="Mensagem para o Jarvis"
             value={input}
+            readOnly={speech.listening}
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
@@ -469,7 +479,23 @@ function JarvisPanel({
             maxLength={800}
             rows={3}
           />
-          <div><span>Enter para enviar · Shift + Enter para quebrar linha</span><button type="submit" disabled={sending || !input.trim()} aria-label="Enviar mensagem">{sending ? <LoaderCircle className="spin" /> : <Send />}</button></div>
+          <div className="jarvis-composer-actions">
+            <span className={speech.error ? "speech-error" : speech.listening ? "speech-listening" : ""} role={speech.error ? "alert" : "status"}>
+              {speech.error ?? (speech.listening ? "Ouvindo... toque no microfone para parar" : "Digite ou dite sua demanda")}
+            </span>
+            <div className="jarvis-composer-buttons">
+              <button
+                type="button"
+                className={`dictation-button ${speech.listening ? "listening" : ""}`}
+                onClick={speech.toggle}
+                disabled={sending || !speech.supported}
+                aria-label={speech.listening ? "Parar ditado" : "Ditar demanda"}
+                aria-pressed={speech.listening}
+                title={speech.supported ? "Ditar demanda em português" : "Ditado não disponível neste navegador"}
+              ><Mic /></button>
+              <button className="send-button" type="submit" disabled={sending || speech.listening || !input.trim()} aria-label="Enviar mensagem">{sending ? <LoaderCircle className="spin" /> : <Send />}</button>
+            </div>
+          </div>
         </form>
       </aside>
     </div>
@@ -653,6 +679,7 @@ function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskVi
   const [completionInput, setCompletionInput] = useState(task.completionSummary ?? "");
   const [preparingCompletion, setPreparingCompletion] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [reevaluating, setReevaluating] = useState(false);
   const done = task.status === "completed" || task.status === "approved";
   const running = Boolean(task.activeTimerStartedAt);
 
@@ -722,6 +749,24 @@ function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskVi
     );
     setCompleting(false);
     if (completed) setCompletionOpen(false);
+  }
+
+  async function reevaluateWithJarvis() {
+    if (reevaluating || task.status !== "completed" || !task.completionSummary) return;
+    setReevaluating(true);
+    await onMutate(
+      task.id,
+      async () => (await requestJson<{ task: TaskView }>(`/api/tasks/${task.id}/reevaluate`, {
+        method: "POST",
+      })).task,
+      (current) => ({
+        ...current,
+        classificationStatus: "classified",
+        completionRationale: "O Jarvis concluiu a reavaliação no modo de demonstração.",
+      }),
+      { optimistic: false },
+    );
+    setReevaluating(false);
   }
 
   function toggleTimer() {
@@ -835,7 +880,21 @@ function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskVi
               <strong>Relato de conclusão</strong>
               <p>{task.completionSummary}</p>
               {task.completionRationale && <small>Jarvis: {task.completionRationale}</small>}
-              {task.classificationStatus === "failed" && <small className="completion-evaluation-failed">A avaliação final do Jarvis ficou pendente.</small>}
+              {(task.classificationStatus === "failed" || task.classificationStatus === "pending") && task.status === "completed" && (
+                <div className="completion-evaluation-retry">
+                  <small className="completion-evaluation-failed">
+                    {reevaluating
+                      ? "O Jarvis está reavaliando esta entrega..."
+                      : task.classificationStatus === "failed"
+                        ? "A avaliação do Jarvis não foi concluída."
+                        : "A avaliação do Jarvis está pendente."}
+                  </small>
+                  <button type="button" onClick={() => void reevaluateWithJarvis()} disabled={reevaluating}>
+                    {reevaluating ? <LoaderCircle className="spin" /> : <RefreshCw />}
+                    {reevaluating ? "Reavaliando..." : "Reavaliar com Jarvis"}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -862,7 +921,7 @@ function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskVi
           <span className={`level-badge level-${task.complexityLevel}`}>Nível {task.complexityLevel}</span>
           <span className="points">{task.points} pts</span>
           {task.efficiencyAdjustment !== 0 && <span className={`efficiency-badge ${task.efficiencyAdjustment > 0 ? "positive" : "negative"}`} title="Ajuste por eficiência de tempo">{task.efficiencyAdjustment > 0 ? "+" : ""}{task.efficiencyAdjustment} tempo</span>}
-          {task.executionAdjustment > 0 && <span className="efficiency-badge positive" title="Bônus de execução avaliado pelo Jarvis">+{task.executionAdjustment} execução</span>}
+          {task.executionAdjustment !== 0 && <span className={`efficiency-badge ${task.executionAdjustment > 0 ? "positive" : "negative"}`} title="Ajuste de execução avaliado pelo Jarvis">{task.executionAdjustment > 0 ? "+" : ""}{task.executionAdjustment} execução</span>}
           <span className="sla-label">SLA {formatDuration(task.estimatedDurationSeconds)}</span>
           {!done && editingDueAt ? (
             <form className="due-editor" onSubmit={saveDueAt}>
@@ -917,9 +976,9 @@ function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskVi
                 rows={6}
                 value={completionInput}
                 onChange={(event) => setCompletionInput(event.target.value)}
-                placeholder="Conte o que foi feito, se ocorreu algum problema e como você resolveu..."
+                placeholder="Conte o que foi feito, quem participou, se houve problemas, pendências ou retrabalho e como a entrega foi validada..."
               />
-              <div className="completion-hint"><Sparkles /><span>O Jarvis analisará somente evidências concretas de esforço adicional. O relato não gera bônus automaticamente.</span></div>
+              <div className="completion-hint"><Sparkles /><span>O Jarvis avaliará autoria, qualidade, escopo e retrabalho. Usar IA ou automação não reduz pontos quando você conduz, revisa e valida a entrega.</span></div>
               <div className="completion-actions">
                 <button type="button" onClick={() => setCompletionOpen(false)} disabled={completing}>Cancelar</button>
                 <button type="submit" disabled={completing || completionInput.trim().length < 10}>{completing ? <LoaderCircle className="spin" /> : <Sparkles />} Concluir e avaliar</button>

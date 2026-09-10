@@ -62,8 +62,53 @@ describe("reavaliação final da tarefa", () => {
       classification_status: "classified",
       classification_metadata: expect.objectContaining({
         justification: "Classificação original.",
-        execution_bonus_percentage: 10,
+        execution_adjustment_percentage: 10,
         efficiency_percentage: 0,
+      }),
+    }));
+  });
+
+  it("suprime bônus de velocidade e impede pontuação negativa quando a execução é penalizada", async () => {
+    const readQuery = { select: vi.fn(), eq: vi.fn(), single: vi.fn() };
+    readQuery.select.mockReturnValue(readQuery);
+    readQuery.eq.mockReturnValue(readQuery);
+    readQuery.single.mockResolvedValue({
+      data: {
+        title: "Implementar landing page",
+        description: "Implementar integralmente a página.",
+        completion_summary: "Outra pessoa implementou toda a página por mim; eu apenas conferi o link publicado.",
+        base_points: 60,
+        estimated_duration_seconds: 28_800,
+        tracked_seconds: 1_800,
+        manual_duration_seconds: null,
+        classification_metadata: {},
+      },
+      error: null,
+    });
+    const updateQuery = { update: vi.fn(), eq: vi.fn() };
+    updateQuery.update.mockReturnValue(updateQuery);
+    updateQuery.eq.mockReturnValueOnce(updateQuery).mockResolvedValueOnce({ error: null });
+    mocks.from.mockReturnValueOnce(readQuery).mockReturnValueOnce(updateQuery);
+    mocks.evaluateTaskCompletion.mockResolvedValue({
+      percentage: -100,
+      adjustment: -60,
+      rationale: "O relato declara que o desenvolvedor não executou a implementação.",
+      model: "test-model",
+    });
+
+    await reevaluateCompletedTask(
+      "44444444-4444-4444-8444-444444444444",
+      "22222222-2222-4222-8222-222222222222",
+    );
+
+    expect(updateQuery.update).toHaveBeenCalledWith(expect.objectContaining({
+      efficiency_adjustment: 0,
+      execution_adjustment: -60,
+      points: 0,
+      classification_metadata: expect.objectContaining({
+        execution_adjustment_percentage: -100,
+        calculated_efficiency_percentage: 40,
+        efficiency_bonus_suppressed: true,
       }),
     }));
   });

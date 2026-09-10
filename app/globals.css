@@ -165,6 +165,11 @@ button { color: inherit; }
 .completion-report p { margin: 3px 0 0; color: var(--text); font-size: 9px; line-height: 1.45; white-space: pre-wrap; }
 .completion-report small { display: block; margin-top: 5px; color: var(--muted); font-size: 8px; line-height: 1.45; }
 .completion-report .completion-evaluation-failed { color: #ff9f0a; }
+.completion-evaluation-retry { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 6px; }
+.completion-evaluation-retry .completion-evaluation-failed { margin: 0; }
+.completion-evaluation-retry button { min-height: 25px; display: inline-flex; align-items: center; gap: 5px; padding: 0 9px; border: 1px solid rgba(0,124,255,.2); border-radius: 999px; color: var(--blue); background: color-mix(in srgb, var(--blue-soft) 72%, var(--surface)); font-size: 8px; font-weight: 650; cursor: pointer; }
+.completion-evaluation-retry button:disabled { cursor: default; opacity: .62; }
+.completion-evaluation-retry button svg { width: 10px; height: 10px; }
 .task-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 11px; line-height: 1.25; }
 .client-tag { display: flex; align-items: center; gap: 5px; padding: 0; border: 0; background: transparent; color: var(--muted); font: inherit; cursor: pointer; }
 .client-tag:disabled { cursor: default; }
@@ -330,11 +335,18 @@ button { color: inherit; }
 .jarvis-composer:focus-within { border-color: rgba(0,124,255,.42); box-shadow: 0 0 0 3px rgba(0,124,255,.07), 0 14px 40px rgba(0,0,0,.08); }
 .jarvis-composer textarea { width: 100%; min-height: 62px; resize: none; padding: 2px 3px; border: 0; outline: 0; color: var(--text); background: transparent; font-size: 11px; line-height: 1.5; }
 .jarvis-composer textarea::placeholder { color: var(--muted-2); }
-.jarvis-composer > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 8px; }
-.jarvis-composer > div span { color: var(--muted-2); font-size: 8px; }
+.jarvis-composer-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 8px; }
+.jarvis-composer-actions > span { color: var(--muted-2); font-size: 8px; line-height: 1.35; }
+.jarvis-composer-actions > span.speech-listening { color: #ff453a; }
+.jarvis-composer-actions > span.speech-error { color: #ff9f0a; }
+.jarvis-composer-buttons { display: flex; align-items: center; gap: 7px; }
 .jarvis-composer button { width: 34px; height: 34px; flex: 0 0 auto; display: grid; place-items: center; border: 0; border-radius: 50%; color: white; background: linear-gradient(135deg, var(--blue), var(--deep)); cursor: pointer; box-shadow: 0 7px 20px rgba(0,124,255,.2); }
 .jarvis-composer button:disabled { opacity: .38; cursor: default; box-shadow: none; }
 .jarvis-composer button svg { width: 14px; }
+.jarvis-composer .dictation-button { color: var(--muted); border: 1px solid var(--line); background: var(--surface-2); box-shadow: none; transition: color .2s, border-color .2s, background .2s, transform .2s; }
+.jarvis-composer .dictation-button:not(:disabled):hover { color: var(--blue); border-color: rgba(0,124,255,.3); }
+.jarvis-composer .dictation-button.listening { color: white; border-color: transparent; background: #ff453a; box-shadow: 0 0 0 5px rgba(255,69,58,.1); animation: microphone-pulse 1.35s ease-in-out infinite; }
+@keyframes microphone-pulse { 50% { transform: scale(1.06); box-shadow: 0 0 0 8px rgba(255,69,58,.04); } }
 .toast { position: fixed; z-index: 50; left: 50%; bottom: 28px; transform: translateX(-50%); padding: 10px 16px; color: white; background: #28282d; border-radius: 10px; box-shadow: 0 8px 30px rgba(0,0,0,.2); font-size: 10px; }
 .completion-modal-backdrop { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 22px; background: rgba(0,0,0,.54); backdrop-filter: blur(10px); animation: completion-fade-in 160ms ease-out; }
 .completion-modal { width: min(560px, 100%); padding: 24px; border: 1px solid var(--glass-border); border-radius: 22px; background: color-mix(in srgb, var(--bg) 90%, transparent); box-shadow: 0 28px 90px rgba(0,0,0,.38), inset 0 1px rgba(255,255,255,.04); backdrop-filter: blur(28px) saturate(130%); animation: completion-scale-in 180ms cubic-bezier(.2,.8,.2,1); }

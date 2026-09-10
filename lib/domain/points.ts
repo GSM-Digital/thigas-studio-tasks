@@ -40,20 +40,23 @@ export interface EfficiencyScore {
   finalPoints: number;
 }
 
-export const EXECUTION_BONUS_PERCENTAGES = [0, 5, 10, 15, 20] as const;
-export type ExecutionBonusPercentage = (typeof EXECUTION_BONUS_PERCENTAGES)[number];
+export const EXECUTION_ADJUSTMENT_PERCENTAGES = [
+  -100, -80, -70, -60, -50, -40, -30, -20, -10, 0, 5, 10, 15, 20,
+] as const;
+export type ExecutionAdjustmentPercentage = (typeof EXECUTION_ADJUSTMENT_PERCENTAGES)[number];
 
 export function calculateExecutionAdjustment(
   basePoints: number,
-  percentage: ExecutionBonusPercentage,
+  percentage: ExecutionAdjustmentPercentage,
 ): number {
   if (!Number.isInteger(basePoints) || basePoints < 1 || basePoints > 100) {
     throw new RangeError("Pontos base devem ser um inteiro entre 1 e 100.");
   }
-  if (!EXECUTION_BONUS_PERCENTAGES.includes(percentage)) {
+  if (!EXECUTION_ADJUSTMENT_PERCENTAGES.includes(percentage)) {
     throw new RangeError("Percentual de execução inválido.");
   }
-  return Math.round(basePoints * (percentage / 100));
+  const magnitude = Math.round(basePoints * (Math.abs(percentage) / 100));
+  return Math.sign(percentage) * magnitude;
 }
 
 /** Deterministic scoring keeps billing reproducible even if the model varies. */

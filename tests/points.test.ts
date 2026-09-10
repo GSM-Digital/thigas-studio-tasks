@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateAmountCents, calculateEfficiencyScore, isValidPointsForLevel } from "@/lib/domain/points";
+import { calculateAmountCents, calculateEfficiencyScore, calculateExecutionAdjustment, isValidPointsForLevel } from "@/lib/domain/points";
 
 describe("regras de pontuação", () => {
   it.each([
@@ -19,6 +19,12 @@ describe("regras de pontuação", () => {
 
   it("rejeita valores negativos", () => {
     expect(() => calculateAmountCents(-1, 400)).toThrow(RangeError);
+  });
+
+  it.each([
+    [-100, -10], [-70, -7], [-10, -1], [0, 0], [5, 1], [20, 2],
+  ] as const)("calcula ajuste de execução de %i%%", (percentage, adjustment) => {
+    expect(calculateExecutionAdjustment(10, percentage)).toBe(adjustment);
   });
 
   it.each([

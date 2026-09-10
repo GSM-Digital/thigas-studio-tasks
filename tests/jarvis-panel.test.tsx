@@ -1,8 +1,32 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { TaskManager } from "@/components/task-manager";
 import { demoClients, demoSettings, demoViewer } from "@/lib/demo-data";
 import type { TaskView } from "@/lib/types";
+
+class MockSpeechRecognition {
+  static instance: MockSpeechRecognition | null = null;
+  continuous = false;
+  interimResults = false;
+  lang = "";
+  maxAlternatives = 0;
+  onstart: (() => void) | null = null;
+  onend: (() => void) | null = null;
+  onresult: ((event: { results: Array<{ 0: { transcript: string }; isFinal: boolean }> }) => void) | null = null;
+  onerror: ((event: { error: string }) => void) | null = null;
+
+  constructor() {
+    MockSpeechRecognition.instance = this;
+  }
+
+  start() { this.onstart?.(); }
+  stop() { this.onend?.(); }
+  abort() { this.onend?.(); }
+  emit(transcript: string, isFinal = true) {
+    this.onresult?.({ results: [Object.assign([{ transcript }], { 0: { transcript }, isFinal })] });
+  }
+  emitError(error: string) { this.onerror?.({ error }); }
+}
 
 beforeAll(() => {
   Object.defineProperty(window, "matchMedia", {
@@ -10,9 +34,16 @@ beforeAll(() => {
     value: vi.fn().mockReturnValue({ matches: false }),
   });
   Element.prototype.scrollIntoView = vi.fn();
+  window.SpeechRecognition = MockSpeechRecognition as never;
 });
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
+afterAll(() => {
+  delete window.SpeechRecognition;
+});
 
 describe("painel do Jarvis", () => {
   it("envia a conversa e inclui a tarefa criada na lista", async () => {
@@ -64,5 +95,51 @@ describe("painel do Jarvis", () => {
       "/api/jarvis/chat",
       expect.objectContaining({ method: "POST" }),
     ));
+  });
+
+  it("transcreve uma demanda ditada em português antes do envio", async () => {
+    render(
+      <TaskManager
+        initialTasks={[]}
+        clients={demoClients}
+        viewer={demoViewer}
+        initialSettings={demoSettings}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Jarvis" }));
+    const microphone = await screen.findByRole("button", { name: "Ditar demanda" });
+    await waitFor(() => expect(microphone).toBeEnabled());
+    fireEvent.click(microphone);
+
+    expect(screen.getByRole("button", { name: "Parar ditado" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText(/Ouvindo/)).toBeVisible();
+    act(() => MockSpeechRecognition.instance?.emit("Jarvis, crie uma demanda para o cliente Full Body amanhã às quinze horas."));
+
+    expect(screen.getByRole("textbox", { name: "Mensagem para o Jarvis" })).toHaveValue(
+      "Jarvis, crie uma demanda para o cliente Full Body amanhã às quinze horas.",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Parar ditado" }));
+    expect(screen.getByRole("button", { name: "Enviar mensagem" })).toBeEnabled();
+  });
+
+  it("orienta o usuário quando o acesso ao microfone é recusado", async () => {
+    render(
+      <TaskManager
+        initialTasks={[]}
+        clients={demoClients}
+        viewer={demoViewer}
+        initialSettings={demoSettings}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Jarvis" }));
+    const microphone = await screen.findByRole("button", { name: "Ditar demanda" });
+    await waitFor(() => expect(microphone).toBeEnabled());
+    fireEvent.click(microphone);
+    act(() => MockSpeechRecognition.instance?.emitError("not-allowed"));
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Permita o acesso ao microfone para usar o ditado.");
+    expect(screen.getByRole("button", { name: "Ditar demanda" })).toBeEnabled();
   });
 });
