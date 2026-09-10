@@ -6,41 +6,59 @@ import { createClient } from "@/lib/supabase/browser";
 
 export function LoginForm() {
   const [email, setEmail] = useState("");
-  const [state, setState] = useState<"idle" | "loading" | "sent" | "error">("idle");
+  const [password, setPassword] = useState("");
+  const [state, setState] = useState<"idle" | "loading" | "error">("idle");
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setState("loading");
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOtp({
+    const { error } = await supabase.auth.signInWithPassword({
       email,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      password,
     });
-    setState(error ? "error" : "sent");
-  }
-
-  if (state === "sent") {
-    return <p className="login-success">Link enviado. Verifique sua caixa de entrada.</p>;
+    if (error) {
+      setState("error");
+      return;
+    }
+    window.location.replace("/");
   }
 
   return (
     <form onSubmit={submit} className="login-form">
-      <label htmlFor="email">E-mail</label>
-      <div className="login-input-wrap">
-        <input
-          id="email"
-          type="email"
-          required
-          autoComplete="email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          placeholder="voce@agencia.com"
-        />
-        <button type="submit" disabled={state === "loading"} aria-label="Entrar">
-          {state === "loading" ? <LoaderCircle className="spin" /> : <ArrowRight />}
-        </button>
+      <div className="login-field">
+        <label htmlFor="email">E-mail</label>
+        <div className="login-input-wrap">
+          <input
+            id="email"
+            type="email"
+            required
+            autoComplete="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            placeholder="voce@agencia.com"
+          />
+        </div>
       </div>
-      {state === "error" && <p className="form-error">Não foi possível enviar o link.</p>}
+      <div className="login-field">
+        <label htmlFor="password">Senha</label>
+        <div className="login-input-wrap">
+          <input
+            id="password"
+            type="password"
+            required
+            minLength={8}
+            autoComplete="current-password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder="Sua senha"
+          />
+          <button type="submit" disabled={state === "loading"} aria-label="Entrar">
+            {state === "loading" ? <LoaderCircle className="spin" /> : <ArrowRight />}
+          </button>
+        </div>
+      </div>
+      {state === "error" && <p className="form-error">E-mail ou senha inválidos.</p>}
     </form>
   );
 }
