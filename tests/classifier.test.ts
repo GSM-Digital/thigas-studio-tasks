@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { classifyTask, toJarvisOutput, type ClassifierClient } from "@/lib/ai/classifier";
 
 function clientWith(output: Record<string, unknown>): ClassifierClient {
-  return { responses: { parse: vi.fn().mockResolvedValue({ output_parsed: output }) } } as ClassifierClient;
+  return { generateStructured: vi.fn().mockResolvedValue(output) };
 }
 
 describe("avaliação do Jarvis", () => {
@@ -16,7 +16,7 @@ describe("avaliação do Jarvis", () => {
         pontuacao_final: 11,
         justificativa: "Configuração moderada concluída muito abaixo do prazo estimado.",
       }),
-      "gpt-5.4-nano",
+      "gemini-3.8-flash",
     );
 
     expect(classification).toMatchObject({
@@ -24,7 +24,7 @@ describe("avaliação do Jarvis", () => {
       basePoints: 10,
       efficiencyAdjustment: 4,
       finalPoints: 14,
-      model: "gpt-5.4-nano",
+      model: "gemini-3.8-flash",
     });
     expect(toJarvisOutput(classification)).toMatchObject({
       nivel_complexidade: 2,

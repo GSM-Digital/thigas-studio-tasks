@@ -86,7 +86,7 @@ describe("POST /api/jarvis/chat", () => {
           efficiencyAdjustment: 0,
           finalPoints: 10,
           rationale: "Configuração moderada de ferramenta externa.",
-          model: "gpt-5.4-nano",
+          model: "gemini-3.8-flash",
         },
       },
     });

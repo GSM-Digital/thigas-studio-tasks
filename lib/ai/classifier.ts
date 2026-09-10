@@ -1,6 +1,8 @@
-import OpenAI from "openai";
-import { zodTextFormat } from "openai/helpers/zod";
 import { z } from "zod";
+import {
+  createGeminiStructuredClient,
+  type StructuredGenerationClient,
+} from "@/lib/ai/gemini";
 import { calculateEfficiencyScore, isValidPointsForLevel } from "@/lib/domain/points";
 import { formatDuration } from "@/lib/domain/time";
 import { getServerEnv } from "@/lib/env";
@@ -43,43 +45,54 @@ export const JARVIS_SYSTEM_PROMPT = `${JARVIS_EVALUATION_GUIDE}
 
 Retorne APENAS um objeto JSON válido com exatamente: "nivel_complexidade", "pontos_base", "bonus_ou_penalidade", "pontuacao_final" e "justificativa".`;
 
-export interface ClassifierClient {
-  responses: {
-    parse(input: unknown): Promise<{ output_parsed: JarvisOutput | null }>;
-  };
-}
+export type ClassifierClient = StructuredGenerationClient;
 
-function createOpenAIClient(): OpenAI {
-  const env = getServerEnv();
-  if (!env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY não configurada.");
-  return new OpenAI({ apiKey: env.OPENAI_API_KEY, maxRetries: 2, timeout: 12_000 });
-}
+const jarvisOutputJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  propertyOrdering: [
+    "nivel_complexidade",
+    "pontos_base",
+    "bonus_ou_penalidade",
+    "pontuacao_final",
+    "justificativa",
+  ],
+  required: [
+    "nivel_complexidade",
+    "pontos_base",
+    "bonus_ou_penalidade",
+    "pontuacao_final",
+    "justificativa",
+  ],
+  properties: {
+    nivel_complexidade: { type: "integer", minimum: 1, maximum: 4 },
+    pontos_base: { type: "integer", minimum: 1, maximum: 100 },
+    bonus_ou_penalidade: { type: "string" },
+    pontuacao_final: { type: "integer", minimum: 1, maximum: 140 },
+    justificativa: { type: "string" },
+  },
+} as const;
 
 export async function classifyTask(
   input: ClassificationInput,
-  client: ClassifierClient = createOpenAIClient(),
-  model = getServerEnv().OPENAI_CLASSIFICATION_MODEL,
+  client: ClassifierClient = createGeminiStructuredClient(),
+  model = getServerEnv().GEMINI_CLASSIFICATION_MODEL,
 ): Promise<TaskClassification> {
   const actualDuration = input.actualDurationSeconds ?? null;
-  const response = await client.responses.parse({
+  const output = await client.generateStructured({
     model,
-    input: [
-      { role: "developer", content: JARVIS_SYSTEM_PROMPT },
-      {
-        role: "user",
-        content: [
-          `Tarefa: ${input.title}`,
-          `Prazo Estimado: ${formatDuration(input.estimatedDurationSeconds)}`,
-          `Tempo Real Gasto: ${actualDuration && actualDuration > 0 ? formatDuration(actualDuration) : "não informado"}`,
-        ].join("\n"),
-      },
-    ],
-    reasoning: { effort: "none" },
-    text: { format: zodTextFormat(jarvisOutputSchema, "jarvis_task_score") },
+    systemInstruction: JARVIS_SYSTEM_PROMPT,
+    prompt: [
+      `Tarefa: ${input.title}`,
+      `Prazo Estimado: ${formatDuration(input.estimatedDurationSeconds)}`,
+      `Tempo Real Gasto: ${actualDuration && actualDuration > 0 ? formatDuration(actualDuration) : "não informado"}`,
+    ].join("\n"),
+    responseJsonSchema: jarvisOutputJsonSchema,
+    maxOutputTokens: 700,
+    timeoutMs: 12_000,
   });
 
-  const parsed = response.output_parsed;
-  if (!parsed) throw new Error("Jarvis não retornou uma avaliação estruturada.");
+  const parsed = jarvisOutputSchema.parse(output);
   if (!isValidPointsForLevel(parsed.nivel_complexidade, parsed.pontos_base)) {
     throw new Error("A pontuação base retornada não pertence à faixa do nível informado.");
   }

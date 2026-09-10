@@ -1,6 +1,6 @@
 # Thigas Plataforma
 
-Sistema full-stack para tarefas, tempo e faturamento de agências. Construído com Next.js 16, React 19, TypeScript, Tailwind CSS 4, Supabase e OpenAI Responses API.
+Sistema full-stack para tarefas, tempo e faturamento de agências. Construído com Next.js 16, React 19, TypeScript, Tailwind CSS 4, Supabase e Gemini Developer API.
 
 ## 1. Estrutura de pastas e arquivos
 
@@ -118,11 +118,11 @@ Resposta:
 }
 ```
 
-O Jarvis usa Structured Outputs com Zod, timeout de 12 s e duas tentativas de rede. O modelo define nível/pontos base e redige a justificativa; o servidor recalcula o fator de eficiência deterministicamente, impedindo divergências financeiras. Sem tempo real, a pontuação inicial é igual aos pontos base. Ao concluir a tarefa — ou corrigir o tempo de uma tarefa concluída — o Jarvis reavalia o resultado.
+O Jarvis usa saída JSON estruturada do Gemini, validação com Zod, timeout de 12 s e até duas novas tentativas para falhas transitórias. O modelo define nível/pontos base e redige a justificativa; o servidor recalcula o fator de eficiência deterministicamente, impedindo divergências financeiras. Sem tempo real, a pontuação inicial é igual aos pontos base. Ao concluir a tarefa — ou corrigir o tempo de uma tarefa concluída — o Jarvis reavalia o resultado.
 
 O chat usa `POST /api/jarvis/chat`. A conversa recente é enviada sem a chave da API sair do servidor. Quando os quatro dados obrigatórios — tarefa, cliente existente, estimativa de execução e data/hora de entrega — estão completos, o servidor valida a saída estruturada, grava a tarefa no Supabase e devolve o card pronto para a lista. Clientes inventados, prazos no passado e pontuações fora da faixa são recusados antes da persistência.
 
-As faixas são: nível 1 = 1–4, nível 2 = 5–15, nível 3 = 20–35 e nível 4 = 50–100 pontos base. O bônus varia de +20% a +40%; atrasos recebem penalidade de -20% a -50%. A chave da OpenAI nunca é enviada ao navegador. O modelo padrão `gpt-5.4-nano` prioriza boa capacidade de classificação com baixo consumo; altere `OPENAI_CLASSIFICATION_MODEL` sem mudança de código.
+As faixas são: nível 1 = 1–4, nível 2 = 5–15, nível 3 = 20–35 e nível 4 = 50–100 pontos base. O bônus varia de +20% a +40%; atrasos recebem penalidade de -20% a -50%. A chave do Gemini nunca é enviada ao navegador. O modelo padrão `gemini-3.8-flash` equilibra capacidade e custo; altere `GEMINI_CLASSIFICATION_MODEL` sem mudança de código.
 
 ## 5. Gerador de relatórios
 
@@ -155,7 +155,7 @@ npx supabase test db
 
 - Node.js 22.13 ou superior;
 - Docker Desktop para Supabase local, ou um projeto hospedado;
-- uma chave da OpenAI API com acesso ao modelo configurado.
+- uma chave da Gemini Developer API com acesso ao modelo configurado.
 
 ### Instalação
 
@@ -176,8 +176,8 @@ Abra `http://localhost:3000`.
 | `NEXT_PUBLIC_SUPABASE_URL` | navegador | URL do projeto |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | navegador | chave publicável, protegida por RLS |
 | `SUPABASE_SECRET_KEY` | servidor | execução manual do fechamento; nunca use `NEXT_PUBLIC_` |
-| `OPENAI_API_KEY` | servidor | avaliação automática pelo Jarvis |
-| `OPENAI_CLASSIFICATION_MODEL` | servidor | padrão `gpt-5.4-nano` |
+| `GEMINI_API_KEY` | servidor | avaliação automática pelo Jarvis; nunca use `NEXT_PUBLIC_` |
+| `GEMINI_CLASSIFICATION_MODEL` | servidor | padrão `gemini-3.8-flash` |
 | `CRON_SECRET` | servidor | bearer token de no mínimo 32 caracteres |
 | `NEXT_PUBLIC_DEMO_MODE` | navegador | `true` somente para demonstração local |
 

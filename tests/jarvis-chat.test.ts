@@ -10,9 +10,7 @@ const clients = [
 const now = new Date("2030-04-17T12:00:00.000Z");
 
 function clientWith(output: Record<string, unknown>): JarvisChatClient {
-  return {
-    responses: { parse: vi.fn().mockResolvedValue({ output_parsed: output }) },
-  } as JarvisChatClient;
+  return { generateStructured: vi.fn().mockResolvedValue(output) };
 }
 
 describe("conversa do Jarvis", () => {
@@ -22,7 +20,7 @@ describe("conversa do Jarvis", () => {
       clients,
       {
         now,
-        model: "gpt-5.4-nano",
+        model: "gemini-3.8-flash",
         client: clientWith({
           acao: "criar_tarefa",
           resposta: "Entendi a demanda.",
@@ -61,7 +59,7 @@ describe("conversa do Jarvis", () => {
       clients,
       {
         now,
-        model: "gpt-5.4-nano",
+        model: "gemini-3.8-flash",
         client: clientWith({
           acao: "perguntar",
           resposta: "Para qual cliente e qual é a estimativa e o prazo de entrega?",
@@ -90,7 +88,7 @@ describe("conversa do Jarvis", () => {
       clients,
       {
         now,
-        model: "gpt-5.4-nano",
+        model: "gemini-3.8-flash",
         client: clientWith({
           acao: "criar_tarefa",
           resposta: "Tudo pronto.",

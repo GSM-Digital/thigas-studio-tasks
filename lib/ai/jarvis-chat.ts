@@ -1,6 +1,8 @@
-import OpenAI from "openai";
-import { zodTextFormat } from "openai/helpers/zod";
 import { z } from "zod";
+import {
+  createGeminiStructuredClient,
+  type StructuredGenerationClient,
+} from "@/lib/ai/gemini";
 import { isValidPointsForLevel } from "@/lib/domain/points";
 import { getServerEnv } from "@/lib/env";
 import { JARVIS_EVALUATION_GUIDE } from "@/lib/ai/classifier";
@@ -51,11 +53,56 @@ export type JarvisChatDecision =
       };
     };
 
-export interface JarvisChatClient {
-  responses: {
-    parse(input: unknown): Promise<{ output_parsed: JarvisChatOutput | null }>;
-  };
-}
+export type JarvisChatClient = StructuredGenerationClient;
+
+const nullableString = { type: ["string", "null"] } as const;
+const nullableInteger = { type: ["integer", "null"] } as const;
+const jarvisChatOutputJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  propertyOrdering: [
+    "acao",
+    "resposta",
+    "titulo",
+    "cliente_id",
+    "prazo_estimado_segundos",
+    "prazo_entrega_iso",
+    "nivel_complexidade",
+    "pontos_base",
+    "justificativa",
+    "campos_faltantes",
+  ],
+  required: [
+    "acao",
+    "resposta",
+    "titulo",
+    "cliente_id",
+    "prazo_estimado_segundos",
+    "prazo_entrega_iso",
+    "nivel_complexidade",
+    "pontos_base",
+    "justificativa",
+    "campos_faltantes",
+  ],
+  properties: {
+    acao: { type: "string", enum: ["perguntar", "criar_tarefa"] },
+    resposta: { type: "string" },
+    titulo: nullableString,
+    cliente_id: nullableString,
+    prazo_estimado_segundos: nullableInteger,
+    prazo_entrega_iso: nullableString,
+    nivel_complexidade: nullableInteger,
+    pontos_base: nullableInteger,
+    justificativa: nullableString,
+    campos_faltantes: {
+      type: "array",
+      items: {
+        type: "string",
+        enum: ["tarefa", "cliente", "prazo_estimado", "prazo_entrega"],
+      },
+    },
+  },
+} as const;
 
 const CHAT_INSTRUCTIONS = `${JARVIS_EVALUATION_GUIDE}
 
@@ -71,12 +118,6 @@ Regras obrigatórias:
 - Para criar uma tarefa, retorne todos os campos preenchidos, campos_faltantes vazio e calcule apenas pontos base. Como ainda não há tempo real, a pontuação final será igual aos pontos base.
 - Para perguntar, deixe como null todo campo ainda desconhecido e faça uma pergunta curta, natural e em português do Brasil.
 - Não afirme que a tarefa foi criada. A aplicação confirmará isso somente após salvar no banco.`;
-
-function createOpenAIClient(): OpenAI {
-  const env = getServerEnv();
-  if (!env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY não configurada.");
-  return new OpenAI({ apiKey: env.OPENAI_API_KEY, maxRetries: 2, timeout: 15_000 });
-}
 
 function normalizeDueAt(value: string | null, now: Date): string | null {
   if (!value) return null;
@@ -105,33 +146,30 @@ export async function interpretJarvisConversation(
 ): Promise<JarvisChatDecision> {
   const now = options.now ?? new Date();
   const timezone = options.timezone ?? "America/Sao_Paulo";
-  const model = options.model ?? getServerEnv().OPENAI_CLASSIFICATION_MODEL;
-  const client = options.client ?? createOpenAIClient();
+  const model = options.model ?? getServerEnv().GEMINI_CLASSIFICATION_MODEL;
+  const client = options.client ?? createGeminiStructuredClient();
   const clientCatalog = clients.map((item) => ({ id: item.id, nome: item.name }));
+  const conversation = messages
+    .map((message) => `${message.role === "user" ? "Usuário" : "Jarvis"}: ${message.content}`)
+    .join("\n");
 
-  const response = await client.responses.parse({
+  const result = await client.generateStructured({
     model,
-    store: false,
-    prompt_cache_key: "jarvis-task-intake-v1",
-    reasoning: { effort: "none" },
-    max_output_tokens: 700,
-    input: [
-      { role: "developer", content: CHAT_INSTRUCTIONS },
-      {
-        role: "developer",
-        content: [
-          `Data/hora atual: ${now.toISOString()}`,
-          `Fuso da agência: ${timezone}`,
-          `Clientes ativos: ${JSON.stringify(clientCatalog)}`,
-        ].join("\n"),
-      },
-      ...messages.map((message) => ({ role: message.role, content: message.content })),
-    ],
-    text: { format: zodTextFormat(jarvisChatOutputSchema, "jarvis_task_intake") },
+    systemInstruction: CHAT_INSTRUCTIONS,
+    prompt: [
+      `Data/hora atual: ${now.toISOString()}`,
+      `Fuso da agência: ${timezone}`,
+      `Clientes ativos: ${JSON.stringify(clientCatalog)}`,
+      "",
+      "Conversa:",
+      conversation,
+    ].join("\n"),
+    responseJsonSchema: jarvisChatOutputJsonSchema,
+    maxOutputTokens: 700,
+    timeoutMs: 15_000,
   });
 
-  const output = response.output_parsed;
-  if (!output) throw new Error("Jarvis não retornou uma resposta estruturada.");
+  const output = jarvisChatOutputSchema.parse(result);
   if (output.acao !== "criar_tarefa") return fallbackQuestion(output);
 
   const title = output.titulo?.trim();
