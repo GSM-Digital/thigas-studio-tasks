@@ -414,8 +414,7 @@ function TaskRow({ task, settings, onMutate, onRemove }: { task: TaskView; setti
 
   useEffect(() => {
     const timeout = window.setTimeout(() => setNow(Date.now()), 0);
-    if (!running) return () => window.clearTimeout(timeout);
-    const interval = window.setInterval(() => setNow(Date.now()), 1_000);
+    const interval = window.setInterval(() => setNow(Date.now()), running ? 1_000 : 60_000);
     return () => {
       window.clearTimeout(timeout);
       window.clearInterval(interval);
