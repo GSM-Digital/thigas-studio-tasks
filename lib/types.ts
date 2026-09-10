@@ -40,6 +40,7 @@ export interface WorkspaceSettings {
   agencyName: string;
   currencyCode: "BRL";
   pointValueCents: number;
+  timezone?: string;
 }
 
 export interface TaskClassification {

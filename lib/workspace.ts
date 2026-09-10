@@ -10,7 +10,7 @@ export async function loadWorkspace(viewer: Viewer): Promise<{
   const [agencyResult, clientsResult, tasksResult, timersResult] = await Promise.all([
     supabase
       .from("agencies")
-      .select("name, currency_code, point_value_cents")
+      .select("name, currency_code, point_value_cents, timezone")
       .eq("id", viewer.agencyId)
       .single(),
     supabase
@@ -82,6 +82,7 @@ export async function loadWorkspace(viewer: Viewer): Promise<{
       agencyName: agencyResult.data.name,
       currencyCode: agencyResult.data.currency_code,
       pointValueCents: agencyResult.data.point_value_cents,
+      timezone: agencyResult.data.timezone,
     },
   };
 }

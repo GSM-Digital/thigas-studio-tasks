@@ -43,8 +43,27 @@ export function isFutureDeadline(value: string, now = new Date()): boolean {
   }
 }
 
-export function formatDeadline(value: string): string {
+export function dateKeyAtTimeZone(
+  value: Date | string,
+  timeZone = "America/Sao_Paulo",
+): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(value));
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+export function formatDeadline(
+  value: string,
+  timeZone = "America/Sao_Paulo",
+): string {
   return new Intl.DateTimeFormat("pt-BR", {
+    timeZone,
     day: "2-digit",
     month: "short",
     hour: "2-digit",

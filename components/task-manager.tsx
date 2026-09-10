@@ -31,6 +31,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createDefaultDeadline,
+  dateKeyAtTimeZone,
   deadlineInputToIso,
   formatDeadline,
   isFutureDeadline,
@@ -464,8 +465,19 @@ function DeveloperView({
   const [description, setDescription] = useState("");
   const [clientId, setClientId] = useState("");
   const [estimatedHours, setEstimatedHours] = useState("");
-  const [dueAt, setDueAt] = useState(createDefaultDeadline);
+  const [dueAt, setDueAt] = useState("");
+  const [currentDate, setCurrentDate] = useState<Date | null>(null);
   const [adding, setAdding] = useState(false);
+  const timezone = settings.timezone ?? "America/Sao_Paulo";
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      const now = new Date();
+      setCurrentDate(now);
+      setDueAt((current) => current || createDefaultDeadline(now));
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, []);
   const hasInvalidEstimate = estimatedHours.trim() !== "" && (
     !Number.isFinite(Number(estimatedHours)) || Number(estimatedHours) <= 0
   );
@@ -473,7 +485,9 @@ function DeveloperView({
     tasks.filter((task) => task.status !== "completed" && task.status !== "approved"),
   );
   const completedTasks = tasks.filter((task) => task.status === "completed" || task.status === "approved");
-  const todayCompleted = allTasks.filter((task) => task.completedAt?.slice(0, 10) === new Date().toISOString().slice(0, 10)).length;
+  const todayCompleted = currentDate
+    ? allTasks.filter((task) => task.completedAt && dateKeyAtTimeZone(task.completedAt, timezone) === dateKeyAtTimeZone(currentDate, timezone)).length
+    : 0;
   const effectiveClientId = clients.some((client) => client.id === clientId)
     ? clientId
     : demoMode ? clients[0]?.id ?? "" : "";
@@ -544,7 +558,7 @@ function DeveloperView({
   return (
     <div className="content-wrap">
       <div className="page-heading">
-        <div><p className="eyebrow">MEU TRABALHO</p><h1>Hoje</h1><p>{new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "numeric", month: "long" }).format(new Date())}</p></div>
+        <div><p className="eyebrow">MEU TRABALHO</p><h1>Hoje</h1><p>{currentDate ? new Intl.DateTimeFormat("pt-BR", { timeZone: timezone, weekday: "long", day: "numeric", month: "long" }).format(currentDate) : "\u00A0"}</p></div>
         <div className="day-score"><Check /><div><strong>{todayCompleted}</strong><span>concluídas hoje</span></div></div>
       </div>
 
@@ -562,7 +576,7 @@ function DeveloperView({
           </select><ChevronDown />
         </div>
         <label className="estimate-input-wrap" title="Opcional: deixe vazio para o Jarvis estimar"><Clock3 /><input aria-label="Prazo estimado em horas" type="number" min="0.25" max="99999" step="0.25" placeholder="Auto" value={estimatedHours} onChange={(event) => setEstimatedHours(event.target.value)} /><span>h</span></label>
-        <label className="deadline-input-wrap" title="Data e hora limite para concluir a tarefa"><CalendarClock /><input aria-label="Data e hora do prazo" type="datetime-local" required min={toDateTimeLocalValue(new Date())} value={dueAt} onChange={(event) => setDueAt(event.target.value)} /></label>
+        <label className="deadline-input-wrap" title="Data e hora limite para concluir a tarefa"><CalendarClock /><input aria-label="Data e hora do prazo" type="datetime-local" required min={currentDate ? toDateTimeLocalValue(currentDate) : undefined} value={dueAt} onChange={(event) => setDueAt(event.target.value)} /></label>
         <button className="add-button" type="submit" disabled={adding || !title.trim() || (demoMode && !effectiveClientId) || hasInvalidEstimate || !isFutureDeadline(dueAt)}>{adding ? <LoaderCircle className="spin" /> : <><Sparkles /> Adicionar</>}</button>
       </form>
 
@@ -684,7 +698,7 @@ function TaskRow({ task, settings, onMutate, onRemove }: { task: TaskView; setti
             {task.description ? <span>{task.description}</span> : <span>Adicionar observação</span>}<Pencil />
           </button>
         )}
-        <div className="task-meta"><span className="client-tag"><i style={{ background: task.clientColor }} />{task.clientName}</span><span className={`level-badge level-${task.complexityLevel}`}>Nível {task.complexityLevel}</span><span className="points">{task.points} pts</span>{task.efficiencyAdjustment !== 0 && <span className={`efficiency-badge ${task.efficiencyAdjustment > 0 ? "positive" : "negative"}`}>{task.efficiencyAdjustment > 0 ? "+" : ""}{task.efficiencyAdjustment}</span>}<span className="sla-label">SLA {formatDuration(task.estimatedDurationSeconds)}</span>{task.dueAt && <span className={`due-label ${!done && new Date(task.dueAt).getTime() < now ? "overdue" : ""}`}><CalendarClock />Prazo {formatDeadline(task.dueAt)}</span>}</div>
+        <div className="task-meta"><span className="client-tag"><i style={{ background: task.clientColor }} />{task.clientName}</span><span className={`level-badge level-${task.complexityLevel}`}>Nível {task.complexityLevel}</span><span className="points">{task.points} pts</span>{task.efficiencyAdjustment !== 0 && <span className={`efficiency-badge ${task.efficiencyAdjustment > 0 ? "positive" : "negative"}`}>{task.efficiencyAdjustment > 0 ? "+" : ""}{task.efficiencyAdjustment}</span>}<span className="sla-label">SLA {formatDuration(task.estimatedDurationSeconds)}</span>{task.dueAt && <span className={`due-label ${!done && new Date(task.dueAt).getTime() < now ? "overdue" : ""}`}><CalendarClock />Prazo {formatDeadline(task.dueAt, settings.timezone)}</span>}</div>
       </div>
       <div className="task-value"><span>{done ? formatCurrency(calculateAmountCents(task.points, settings.pointValueCents)) : "Estimado"}</span><strong>{task.points} × {formatCurrency(settings.pointValueCents)}</strong></div>
       <div className="timer-control">
