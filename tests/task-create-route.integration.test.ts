@@ -53,7 +53,7 @@ describe("POST /api/tasks", () => {
     const tasks = taskQuery();
     const dueAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     mocks.from.mockReturnValueOnce(clients).mockReturnValueOnce(tasks);
-    mocks.classifyTask.mockResolvedValue({ complexityLevel: 2, basePoints: 8, efficiencyAdjustment: 0, finalPoints: 8, rationale: "Setup moderado.", model: "gemini-2.5-flash" });
+    mocks.classifyTask.mockResolvedValue({ complexityLevel: 2, basePoints: 8, efficiencyAdjustment: 0, finalPoints: 8, rationale: "Setup moderado.", model: "gemini-3.6-flash" });
     mocks.getTaskView.mockResolvedValue({ id: "44444444-4444-4444-8444-444444444444", dueAt });
 
     const response = await POST(new Request("http://localhost/api/tasks", {

@@ -8,7 +8,7 @@ vi.mock("@google/genai", () => ({
   GoogleGenAI: class {
     models = { generateContent: mocks.generateContent };
   },
-  ThinkingLevel: { LOW: "LOW" },
+  ThinkingLevel: { MINIMAL: "MINIMAL" },
 }));
 
 vi.mock("@/lib/env", () => ({
@@ -27,7 +27,7 @@ describe("cliente estruturado do Gemini", () => {
     const client = createGeminiStructuredClient();
 
     await expect(client.generateStructured({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.6-flash",
       systemInstruction: "Responda somente JSON.",
       prompt: "Configurar GA4",
       responseJsonSchema: {
@@ -37,12 +37,12 @@ describe("cliente estruturado do Gemini", () => {
     })).resolves.toEqual({ nivel_complexidade: 2 });
 
     expect(mocks.generateContent).toHaveBeenCalledWith(expect.objectContaining({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.6-flash",
       contents: "Configurar GA4",
       config: expect.objectContaining({
         responseMimeType: "application/json",
         temperature: 0,
-        thinkingConfig: { thinkingBudget: 0 },
+        thinkingConfig: { thinkingLevel: "MINIMAL" },
       }),
     }));
   });
@@ -52,7 +52,7 @@ describe("cliente estruturado do Gemini", () => {
     const client = createGeminiStructuredClient();
 
     await expect(client.generateStructured({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.6-flash",
       systemInstruction: "Responda somente JSON.",
       prompt: "Teste",
       responseJsonSchema: { type: "object" },

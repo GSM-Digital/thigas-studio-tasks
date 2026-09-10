@@ -27,7 +27,7 @@ function delay(milliseconds: number): Promise<void> {
 function thinkingConfigFor(model: string) {
   return model.startsWith("gemini-2.5-")
     ? { thinkingBudget: 0 }
-    : { thinkingLevel: ThinkingLevel.LOW };
+    : { thinkingLevel: ThinkingLevel.MINIMAL };
 }
 
 export function createGeminiStructuredClient(): StructuredGenerationClient {

@@ -20,7 +20,7 @@ describe("conversa do Jarvis", () => {
       clients,
       {
         now,
-        model: "gemini-2.5-flash",
+        model: "gemini-3.6-flash",
         client: clientWith({
           acao: "criar_tarefa",
           resposta: "Entendi a demanda.",
@@ -59,7 +59,7 @@ describe("conversa do Jarvis", () => {
       clients,
       {
         now,
-        model: "gemini-2.5-flash",
+        model: "gemini-3.6-flash",
         client: clientWith({
           acao: "perguntar",
           resposta: "Para qual cliente e qual é a estimativa e o prazo de entrega?",
@@ -88,7 +88,7 @@ describe("conversa do Jarvis", () => {
       clients,
       {
         now,
-        model: "gemini-2.5-flash",
+        model: "gemini-3.6-flash",
         client: clientWith({
           acao: "criar_tarefa",
           resposta: "Tudo pronto.",

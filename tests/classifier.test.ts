@@ -16,7 +16,7 @@ describe("avaliação do Jarvis", () => {
         pontuacao_final: 11,
         justificativa: "Configuração moderada concluída muito abaixo do prazo estimado.",
       }),
-      "gemini-2.5-flash",
+      "gemini-3.6-flash",
     );
 
     expect(classification).toMatchObject({
@@ -24,7 +24,7 @@ describe("avaliação do Jarvis", () => {
       basePoints: 10,
       efficiencyAdjustment: 4,
       finalPoints: 14,
-      model: "gemini-2.5-flash",
+      model: "gemini-3.6-flash",
     });
     expect(toJarvisOutput(classification)).toMatchObject({
       nivel_complexidade: 2,
