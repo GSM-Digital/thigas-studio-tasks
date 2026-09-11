@@ -55,6 +55,16 @@ export function calculateExecutionAdjustment(
   if (!EXECUTION_ADJUSTMENT_PERCENTAGES.includes(percentage)) {
     throw new RangeError("Percentual de execução inválido.");
   }
+  return calculatePercentageAdjustment(basePoints, percentage);
+}
+
+export function calculatePercentageAdjustment(basePoints: number, percentage: number): number {
+  if (!Number.isInteger(basePoints) || basePoints < 1 || basePoints > 100) {
+    throw new RangeError("Pontos base devem ser um inteiro entre 1 e 100.");
+  }
+  if (!Number.isInteger(percentage) || percentage < -100 || percentage > 20) {
+    throw new RangeError("Percentual de ajuste deve ser um inteiro entre -100 e 20.");
+  }
   const magnitude = Math.round(basePoints * (Math.abs(percentage) / 100));
   return Math.sign(percentage) * magnitude;
 }

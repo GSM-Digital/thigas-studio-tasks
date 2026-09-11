@@ -43,6 +43,7 @@ import {
 } from "@/lib/domain/deadline";
 import { calculateAmountCents, calculateEfficiencyScore, formatCurrency } from "@/lib/domain/points";
 import { groupTasksByDeadline } from "@/lib/domain/task-groups";
+import { TASK_SUGGESTION_CATEGORY_LABELS } from "@/lib/domain/task-suggestions";
 import { effectiveDuration, formatDuration, parseDuration } from "@/lib/domain/time";
 import { generateBillingReport, reportToCsv } from "@/lib/reports/generate";
 import { useSpeechDictation } from "@/lib/browser/use-speech-dictation";
@@ -51,6 +52,7 @@ import type {
   AppRole,
   ClientSummary,
   TaskView,
+  TaskSuggestion,
   Viewer,
   WorkspaceSettings,
 } from "@/lib/types";
@@ -662,12 +664,12 @@ function DeveloperView({
         if (result.clientCreated) {
           onNotice(`Cliente ${resolvedClient.name} criado automaticamente pelo Jarvis.`);
         } else if (estimatedDurationSeconds === null) {
-          onNotice(`Jarvis estimou o SLA em ${formatDuration(created.estimatedDurationSeconds)}.`);
+          onNotice(`Jarvis estimou o tempo necessário em ${formatDuration(created.estimatedDurationSeconds)}.`);
         }
       }
       onTasksChange((current) => [created, ...current]);
       if (demoMode && estimatedDurationSeconds === null) {
-        onNotice(`Jarvis estimou o SLA em ${formatDuration(created.estimatedDurationSeconds)}.`);
+        onNotice(`Jarvis estimou o tempo necessário em ${formatDuration(created.estimatedDurationSeconds)}.`);
       }
       setTitle("");
       setDescription("");
@@ -700,7 +702,7 @@ function DeveloperView({
             {clients.map((client) => <option value={client.id} key={client.id}>{client.name}</option>)}
           </select><ChevronDown />
         </div>
-        <label className="estimate-input-wrap" title="Opcional: deixe vazio para o Jarvis estimar"><Clock3 /><input aria-label="Prazo estimado em horas" type="number" min="0.25" max="99999" step="0.25" placeholder="Auto" value={estimatedHours} onChange={(event) => setEstimatedHours(event.target.value)} /><span>h</span></label>
+        <label className="estimate-input-wrap" title="Opcional: deixe vazio para o Jarvis estimar"><Clock3 /><input aria-label="Tempo previsto em horas" type="number" min="0.25" max="99999" step="0.25" placeholder="Jarvis" value={estimatedHours} onChange={(event) => setEstimatedHours(event.target.value)} /><span>h</span></label>
         <label className="deadline-input-wrap" title="Data e hora limite para concluir a tarefa"><CalendarClock /><input aria-label="Data e hora do prazo" type="datetime-local" required min={currentDate ? toDateTimeLocalValue(currentDate) : undefined} value={dueAt} onChange={(event) => setDueAt(event.target.value)} /></label>
         <button className="add-button" type="submit" disabled={adding || !title.trim() || (demoMode && !effectiveClientId) || hasInvalidEstimate || !isFutureDeadline(dueAt)}>{adding ? <LoaderCircle className="spin" /> : <><Sparkles /> Adicionar</>}</button>
       </form>
@@ -715,7 +717,7 @@ function DeveloperView({
                 <span>{group.tasks.length} {group.tasks.length === 1 ? "demanda" : "demandas"}</span>
               </div>
               <div className="task-list">
-                {group.tasks.map((task) => <TaskRow key={task.id} task={task} clients={clients} settings={settings} onMutate={onMutateTask} onRemove={onRemoveTask} />)}
+                {group.tasks.map((task) => <TaskRow key={task.id} task={task} clients={clients} settings={settings} demoMode={demoMode} onMutate={onMutateTask} onRemove={onRemoveTask} />)}
               </div>
             </section>
           ))}
@@ -728,7 +730,7 @@ function DeveloperView({
         <details className="completed-group" open>
           <summary><ChevronDown /> Concluídas <span>{completedTasks.length}</span></summary>
           <div className="task-list completed-list">
-            {completedTasks.map((task) => <TaskRow key={task.id} task={task} clients={clients} settings={settings} onMutate={onMutateTask} />)}
+            {completedTasks.map((task) => <TaskRow key={task.id} task={task} clients={clients} settings={settings} demoMode={demoMode} onMutate={onMutateTask} />)}
           </div>
         </details>
       )}
@@ -736,7 +738,81 @@ function DeveloperView({
   );
 }
 
-function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskView; clients: ClientSummary[]; settings: WorkspaceSettings; onMutate: TaskMutator; onRemove?: (id: string) => Promise<void> }) {
+function TaskSuggestionsChecklist({
+  suggestions,
+  done,
+  compact = false,
+  savingId,
+  evidenceDrafts,
+  onEvidenceChange,
+  onUpdate,
+}: {
+  suggestions: TaskSuggestion[];
+  done: boolean;
+  compact?: boolean;
+  savingId: string | null;
+  evidenceDrafts: Record<string, string>;
+  onEvidenceChange: (id: string, value: string) => void;
+  onUpdate: (suggestion: TaskSuggestion, status: TaskSuggestion["status"], evidence: string | null) => void;
+}) {
+  return (
+    <div className={`suggestion-list ${compact ? "compact" : ""}`}>
+      {suggestions.map((suggestion) => {
+        const evidence = evidenceDrafts[suggestion.id] ?? suggestion.evidence ?? "";
+        const checked = suggestion.status === "completed";
+        const unavailable = suggestion.status === "not_applicable";
+        return (
+          <div className={`suggestion-item ${checked ? "completed" : ""} ${unavailable ? "not-applicable" : ""}`} key={suggestion.id}>
+            <button
+              type="button"
+              className="suggestion-check"
+              disabled={done || savingId === suggestion.id}
+              aria-label={checked ? `Desmarcar ${suggestion.title}` : `Marcar ${suggestion.title} como realizado`}
+              aria-pressed={checked}
+              onClick={() => onUpdate(suggestion, checked ? "pending" : "completed", evidence)}
+            >{savingId === suggestion.id ? <LoaderCircle className="spin" /> : checked ? <Check /> : null}</button>
+            <div className="suggestion-copy">
+              <div className="suggestion-title-row">
+                <strong>{suggestion.title}</strong>
+                <span className={`suggestion-category ${suggestion.category}`}>{TASK_SUGGESTION_CATEGORY_LABELS[suggestion.category]}</span>
+                <b>+{suggestion.rewardPercentage}%</b>
+                {suggestion.omissionPenaltyPercentage > 0 && <em>Se não fizer: −{suggestion.omissionPenaltyPercentage}%</em>}
+              </div>
+              <p>{suggestion.description}</p>
+              {suggestion.tools.length > 0 && <small>Ferramentas sugeridas: {suggestion.tools.join(", ")}</small>}
+              <div className="suggestion-proof-row">
+                <input
+                  aria-label={`Comprovação de ${suggestion.title}`}
+                  value={evidence}
+                  readOnly={done}
+                  maxLength={1000}
+                  placeholder={suggestion.evidenceRequired ? "Comprovação obrigatória: informe teste, link ou resultado" : "Comprovação opcional"}
+                  onChange={(event) => onEvidenceChange(suggestion.id, event.target.value)}
+                />
+                {!done && (
+                  <>
+                    {evidence !== (suggestion.evidence ?? "") && <button type="button" onClick={() => onUpdate(suggestion, suggestion.status, evidence)}>Salvar comprovação</button>}
+                    <button type="button" onClick={() => onUpdate(suggestion, unavailable ? "pending" : "not_applicable", evidence)}>
+                      {unavailable ? "Reativar" : "Não se aplica"}
+                    </button>
+                  </>
+                )}
+              </div>
+              {done && suggestion.verificationStatus !== "pending" && (
+                <div className={`suggestion-verification ${suggestion.verificationStatus}`}>
+                  {suggestion.verificationStatus === "verified" ? "Confirmado pelo Jarvis" : suggestion.verificationStatus === "not_applicable" ? "Dispensa aceita" : "Não confirmado"}
+                  {suggestion.verificationRationale && ` — ${suggestion.verificationRationale}`}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function TaskRow({ task, clients, settings, demoMode, onMutate, onRemove }: { task: TaskView; clients: ClientSummary[]; settings: WorkspaceSettings; demoMode: boolean; onMutate: TaskMutator; onRemove?: (id: string) => Promise<void> }) {
   const [editingTime, setEditingTime] = useState(false);
   const [timeInput, setTimeInput] = useState("");
   const [editingDescription, setEditingDescription] = useState(false);
@@ -753,6 +829,12 @@ function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskVi
   const [preparingCompletion, setPreparingCompletion] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [reevaluating, setReevaluating] = useState(false);
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const [suggestions, setSuggestions] = useState<TaskSuggestion[] | null>(null);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
+  const [savingSuggestionId, setSavingSuggestionId] = useState<string | null>(null);
+  const [evidenceDrafts, setEvidenceDrafts] = useState<Record<string, string>>({});
   const completionSpeech = useSpeechDictation({
     value: completionInput,
     onChange: setCompletionInput,
@@ -772,6 +854,71 @@ function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskVi
   }, [running]);
 
   const seconds = effectiveDuration(task.trackedSeconds, task.manualDurationSeconds, task.activeTimerStartedAt, now);
+
+  function demoSuggestions(): TaskSuggestion[] {
+    return [
+      { id: `${task.id}-1`, taskId: task.id, position: 1, title: "Validar antes de publicar", description: "Confira o resultado em computador e celular antes de colocar no ar.", category: "essential", rewardPercentage: 3, omissionPenaltyPercentage: 10, evidenceRequired: true, tools: [], status: "pending", evidence: null, verificationStatus: "pending", verificationRationale: null },
+      { id: `${task.id}-2`, taskId: task.id, position: 2, title: "Registrar o que foi alterado", description: "Anote as principais mudanças para facilitar futuras consultas.", category: "recommended", rewardPercentage: 2, omissionPenaltyPercentage: 0, evidenceRequired: false, tools: [], status: "pending", evidence: null, verificationStatus: "pending", verificationRationale: null },
+      { id: `${task.id}-3`, taskId: task.id, position: 3, title: "Fazer follow-up com o cliente", description: "Confirme se a entrega atende ao pedido e registre a resposta.", category: "follow_up", rewardPercentage: 1, omissionPenaltyPercentage: 0, evidenceRequired: false, tools: [], status: "pending", evidence: null, verificationStatus: "pending", verificationRationale: null },
+    ];
+  }
+
+  async function ensureSuggestions(): Promise<TaskSuggestion[]> {
+    if (suggestions) return suggestions;
+    if (demoMode) {
+      const sample = demoSuggestions();
+      setSuggestions(sample);
+      setEvidenceDrafts(Object.fromEntries(sample.map((item) => [item.id, item.evidence ?? ""])));
+      return sample;
+    }
+    setLoadingSuggestions(true);
+    setSuggestionsError(null);
+    try {
+      const method = done ? "GET" : "POST";
+      const result = await requestJson<{ suggestions: TaskSuggestion[] }>(`/api/tasks/${task.id}/suggestions`, { method });
+      setSuggestions(result.suggestions);
+      setEvidenceDrafts(Object.fromEntries(result.suggestions.map((item) => [item.id, item.evidence ?? ""])));
+      return result.suggestions;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Não foi possível carregar as sugestões do Jarvis.";
+      setSuggestionsError(message);
+      throw error;
+    } finally {
+      setLoadingSuggestions(false);
+    }
+  }
+
+  async function toggleSuggestions() {
+    const nextOpen = !suggestionsOpen;
+    setSuggestionsOpen(nextOpen);
+    if (nextOpen && !suggestions && !loadingSuggestions) {
+      try { await ensureSuggestions(); } catch { /* A mensagem aparece dentro da aba. */ }
+    }
+  }
+
+  async function updateSuggestion(suggestion: TaskSuggestion, status: TaskSuggestion["status"], evidence: string | null) {
+    if (done || savingSuggestionId) return;
+    if (status === "not_applicable" && (!evidence || evidence.trim().length < 5)) {
+      setSuggestionsError("Explique no campo de comprovação por que a sugestão não se aplica.");
+      return;
+    }
+    setSavingSuggestionId(suggestion.id);
+    setSuggestionsError(null);
+    try {
+      const updated = demoMode
+        ? { ...suggestion, status, evidence: evidence?.trim() || null }
+        : (await requestJson<{ suggestion: TaskSuggestion }>(`/api/tasks/${task.id}/suggestions/${suggestion.id}`, {
+            method: "PATCH",
+            body: JSON.stringify({ status, evidence: evidence?.trim() || null }),
+          })).suggestion;
+      setSuggestions((current) => current?.map((item) => item.id === updated.id ? updated : item) ?? [updated]);
+      setEvidenceDrafts((current) => ({ ...current, [updated.id]: updated.evidence ?? "" }));
+    } catch (error) {
+      setSuggestionsError(error instanceof Error ? error.message : "Não foi possível atualizar o checklist.");
+    } finally {
+      setSavingSuggestionId(null);
+    }
+  }
 
   function reopenTask() {
     void onMutate(
@@ -793,6 +940,7 @@ function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskVi
       setPreparingCompletion(false);
       if (!stopped) return;
     }
+    void ensureSuggestions().catch(() => { /* A conclusão continua disponível mesmo se a IA estiver indisponível. */ });
     setCompletionInput(task.completionSummary ?? "");
     setCompletionOpen(true);
   }
@@ -800,7 +948,7 @@ function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskVi
   async function completeTask(event: React.FormEvent) {
     event.preventDefault();
     const completionSummary = completionInput.trim();
-    if (completionSummary.length < 10 || completing || completionSpeech.listening) return;
+    if (completionSummary.length < 10 || completing || loadingSuggestions || completionSpeech.listening) return;
     setCompleting(true);
     const completedAt = new Date().toISOString();
     const completed = await onMutate(
@@ -946,6 +1094,16 @@ function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskVi
     }
   }
 
+  const suggestionCount = suggestions?.length ?? 0;
+  const completedSuggestionCount = suggestions?.filter((item) => item.status === "completed").length ?? 0;
+  const availableSuggestionBonus = suggestions?.reduce((total, item) => total + item.rewardPercentage, 0) ?? 0;
+  const confirmedSuggestionBonus = suggestions?.reduce(
+    (total, item) => total + (done
+      ? item.verificationStatus === "verified" ? item.rewardPercentage : 0
+      : item.status === "completed" ? item.rewardPercentage : 0),
+    0,
+  ) ?? 0;
+
   return (
     <article className={`task-row ${done ? "is-done" : ""}`}>
       <button className="check-button" onClick={done ? reopenTask : () => void openCompletion()} disabled={preparingCompletion} aria-label={done ? "Reabrir tarefa" : "Concluir tarefa"}>{preparingCompletion ? <LoaderCircle className="spin" /> : done && <Check />}</button>
@@ -1014,7 +1172,7 @@ function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskVi
           <span className="points">{task.points} pts</span>
           {task.efficiencyAdjustment !== 0 && <span className={`efficiency-badge ${task.efficiencyAdjustment > 0 ? "positive" : "negative"}`} title="Ajuste por eficiência de tempo">{task.efficiencyAdjustment > 0 ? "+" : ""}{task.efficiencyAdjustment} tempo</span>}
           {task.executionAdjustment !== 0 && <span className={`efficiency-badge ${task.executionAdjustment > 0 ? "positive" : "negative"}`} title="Ajuste de execução avaliado pelo Jarvis">{task.executionAdjustment > 0 ? "+" : ""}{task.executionAdjustment} execução</span>}
-          <span className="sla-label">SLA {formatDuration(task.estimatedDurationSeconds)}</span>
+          <span className="sla-label">Tempo previsto {formatDuration(task.estimatedDurationSeconds)}</span>
           {!done && editingDueAt ? (
             <form className="due-editor" onSubmit={saveDueAt}>
               <CalendarClock />
@@ -1043,6 +1201,30 @@ function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskVi
         {!done && <button className={`play-button ${running ? "running" : ""}`} onClick={toggleTimer} aria-label={running ? "Parar cronômetro" : "Iniciar cronômetro"}>{running ? <Pause /> : <Play />}</button>}
         {!done && onRemove && <button className={`delete-task-button ${confirmingDelete ? "confirming" : ""}`} onClick={() => void deleteTask()} onBlur={() => !deleting && setConfirmingDelete(false)} disabled={running || deleting} aria-label={confirmingDelete ? `Confirmar exclusão de ${task.title}` : `Excluir ${task.title}`} title={running ? "Pare o cronômetro antes de excluir" : "Excluir tarefa"}>{deleting ? <LoaderCircle className="spin" /> : confirmingDelete ? <span>Excluir</span> : <Trash2 />}</button>}
       </div>
+      <div className="task-suggestions-area">
+        <button type="button" className="suggestions-toggle" onClick={() => void toggleSuggestions()} aria-expanded={suggestionsOpen}>
+          <span><Sparkles /> Sugestões do Jarvis</span>
+          {suggestionCount > 0 && <small>{completedSuggestionCount}/{suggestionCount} realizados · +{confirmedSuggestionBonus}% confirmado · +{availableSuggestionBonus}% disponível</small>}
+          {loadingSuggestions ? <LoaderCircle className="spin" /> : <ChevronDown />}
+        </button>
+        {suggestionsOpen && (
+          <div className="suggestions-panel">
+            {loadingSuggestions && <p className="suggestions-state"><LoaderCircle className="spin" /> Jarvis está preparando sugestões para esta demanda...</p>}
+            {suggestionsError && <p className="suggestions-error" role="alert">{suggestionsError}</p>}
+            {suggestions && suggestions.length > 0 && (
+              <TaskSuggestionsChecklist
+                suggestions={suggestions}
+                done={done}
+                savingId={savingSuggestionId}
+                evidenceDrafts={evidenceDrafts}
+                onEvidenceChange={(id, value) => setEvidenceDrafts((current) => ({ ...current, [id]: value }))}
+                onUpdate={(suggestion, status, evidence) => void updateSuggestion(suggestion, status, evidence)}
+              />
+            )}
+            {!loadingSuggestions && suggestions && suggestions.length === 0 && <p className="suggestions-state">Esta tarefa foi concluída sem um checklist de sugestões.</p>}
+          </div>
+        )}
+      </div>
       {completionOpen && createPortal((
         <div className="completion-modal-backdrop" onMouseDown={closeCompletion}>
           <section className="completion-modal" role="dialog" aria-modal="true" aria-labelledby={`completion-title-${task.id}`} onMouseDown={(event) => event.stopPropagation()}>
@@ -1054,9 +1236,27 @@ function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskVi
             <p className="completion-task-title">{task.title}</p>
             <div className="completion-context">
               <span><Clock3 /> Real {formatDuration(seconds)}</span>
-              <span>SLA {formatDuration(task.estimatedDurationSeconds)}</span>
+              <span>Tempo previsto {formatDuration(task.estimatedDurationSeconds)}</span>
               <span>{task.basePoints} pontos-base</span>
             </div>
+            {suggestions && suggestions.length > 0 && (
+              <div className="completion-checklist">
+                <div className="completion-checklist-heading">
+                  <div><strong>Revise o checklist</strong><small>O Jarvis verificará os itens usando seu relato e as comprovações.</small></div>
+                  <span>{completedSuggestionCount}/{suggestionCount} realizados</span>
+                </div>
+                <TaskSuggestionsChecklist
+                  suggestions={suggestions}
+                  done={false}
+                  compact
+                  savingId={savingSuggestionId}
+                  evidenceDrafts={evidenceDrafts}
+                  onEvidenceChange={(id, value) => setEvidenceDrafts((current) => ({ ...current, [id]: value }))}
+                  onUpdate={(suggestion, status, evidence) => void updateSuggestion(suggestion, status, evidence)}
+                />
+              </div>
+            )}
+            {suggestionsError && <p className="suggestions-error" role="alert">{suggestionsError}</p>}
             <form onSubmit={completeTask}>
               <label htmlFor={`completion-summary-${task.id}`}>Conte livremente como foi a entrega</label>
               <div className="completion-input-wrap">
@@ -1087,10 +1287,10 @@ function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskVi
               <div className={`completion-speech-status ${completionSpeech.error ? "error" : completionSpeech.listening ? "listening" : ""}`} role={completionSpeech.error ? "alert" : "status"}>
                 {completionSpeech.error ?? (completionSpeech.listening ? "Ouvindo... fale naturalmente e toque novamente para parar." : "Você pode ditar e revisar o texto antes de concluir.")}
               </div>
-              <div className="completion-hint"><Sparkles /><span>O Jarvis organizará seu relato em um resumo profissional e avaliará autoria, qualidade, escopo e retrabalho. Usar IA ou automação não reduz pontos quando você conduz, revisa e valida a entrega.</span></div>
+              <div className="completion-hint"><Sparkles /><span>O Jarvis organizará seu relato, conferirá o checklist e avaliará autoria, qualidade, resultado e correções necessárias. Usar inteligência artificial ou automação não reduz pontos quando você conduz, revisa e valida a entrega.</span></div>
               <div className="completion-actions">
                 <button type="button" onClick={closeCompletion} disabled={completing}>Cancelar</button>
-                <button type="submit" disabled={completing || completionSpeech.listening || completionInput.trim().length < 10}>{completing ? <LoaderCircle className="spin" /> : <Sparkles />} {completing ? "Jarvis está resumindo..." : "Resumir e concluir"}</button>
+                <button type="submit" disabled={completing || loadingSuggestions || completionSpeech.listening || completionInput.trim().length < 10}>{completing || loadingSuggestions ? <LoaderCircle className="spin" /> : <Sparkles />} {completing ? "Jarvis está resumindo..." : loadingSuggestions ? "Preparando checklist..." : "Resumir e concluir"}</button>
               </div>
             </form>
           </section>

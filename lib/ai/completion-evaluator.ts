@@ -28,13 +28,18 @@ const completionOutputSchema = z.object({
     z.literal(20),
   ]),
   justificativa_ajuste: z.string().trim().min(20).max(600),
+  checklist_avaliacao: z.array(z.object({
+    posicao: z.number().int().min(1).max(6),
+    resultado: z.enum(["verified", "rejected", "not_applicable"]),
+    justificativa: z.string().trim().min(5).max(300),
+  })).max(6).default([]),
 });
 
 const completionJsonSchema = {
   type: "object",
   additionalProperties: false,
-  propertyOrdering: ["resumo_conclusao", "ajuste_execucao_percentual", "justificativa_ajuste"],
-  required: ["resumo_conclusao", "ajuste_execucao_percentual", "justificativa_ajuste"],
+  propertyOrdering: ["resumo_conclusao", "ajuste_execucao_percentual", "justificativa_ajuste", "checklist_avaliacao"],
+  required: ["resumo_conclusao", "ajuste_execucao_percentual", "justificativa_ajuste", "checklist_avaliacao"],
   properties: {
     resumo_conclusao: { type: "string" },
     ajuste_execucao_percentual: {
@@ -42,6 +47,18 @@ const completionJsonSchema = {
       enum: [-100, -80, -70, -60, -50, -40, -30, -20, -10, 0, 5, 10, 15, 20],
     },
     justificativa_ajuste: { type: "string" },
+    checklist_avaliacao: {
+      type: "array", maxItems: 6,
+      items: {
+        type: "object", additionalProperties: false,
+        required: ["posicao", "resultado", "justificativa"],
+        properties: {
+          posicao: { type: "integer", minimum: 1, maximum: 6 },
+          resultado: { type: "string", enum: ["verified", "rejected", "not_applicable"] },
+          justificativa: { type: "string" },
+        },
+      },
+    },
   },
 } as const;
 
@@ -71,7 +88,15 @@ REGRAS DE EQUIDADE
 - Não transforme velocidade em penalidade; eficiência de tempo é calculada separadamente pelo sistema.
 - Não invente falhas, autoria de terceiros ou problemas que não estejam explícitos no relato.
 - O relato não ganha pontos apenas por ser detalhado. Não premie atividades já previstas no escopo.
-- Escolha somente um dos percentuais permitidos e escreva a justificativa em português do Brasil, citando as evidências concretas do relato.`;
+- Escolha somente um dos percentuais permitidos e escreva a justificativa em português do Brasil, citando as evidências concretas do relato.
+
+AVALIAÇÃO DO CHECKLIST
+- Avalie cada item recebido, sem criar ou remover itens.
+- Marque "verified" somente quando o relato ou a evidência confirmar o resultado.
+- Marque "rejected" quando o item estiver pendente, a evidência obrigatória estiver ausente ou a afirmação não for sustentada pelo relato.
+- Aceite "not_applicable" somente quando a explicação mostrar que o item realmente não se aplica; caso contrário, marque "rejected".
+- Escreva justificativas curtas e fáceis de entender. Não use palavras técnicas sem explicá-las.
+- O sistema calcula os pontos do checklist; não inclua esses bônus no ajuste geral de execução.`;
 
 export interface CompletionEvaluationInput {
   title: string;
@@ -80,6 +105,15 @@ export interface CompletionEvaluationInput {
   basePoints: number;
   estimatedDurationSeconds: number;
   actualDurationSeconds: number;
+  checklist?: Array<{
+    position: number;
+    title: string;
+    description: string;
+    category: string;
+    status: string;
+    evidence: string | null;
+    evidenceRequired: boolean;
+  }>;
 }
 
 export interface CompletionEvaluation {
@@ -88,6 +122,7 @@ export interface CompletionEvaluation {
   adjustment: number;
   rationale: string;
   model: string;
+  checklistReviews: Array<{ position: number; result: "verified" | "rejected" | "not_applicable"; rationale: string }>;
 }
 
 export async function evaluateTaskCompletion(
@@ -103,9 +138,10 @@ export async function evaluateTaskCompletion(
       `Tarefa: ${input.title}`,
       `Descrição original: ${input.description?.trim() || "não informada"}`,
       `Relato de conclusão: ${input.completionSummary}`,
+      `Checklist informado: ${JSON.stringify(input.checklist ?? [])}`,
     ].join("\n"),
     responseJsonSchema: completionJsonSchema,
-    maxOutputTokens: 600,
+    maxOutputTokens: 900,
     timeoutMs: 12_000,
   });
   const parsed = completionOutputSchema.parse(output);
@@ -115,5 +151,10 @@ export async function evaluateTaskCompletion(
     adjustment: calculateExecutionAdjustment(input.basePoints, parsed.ajuste_execucao_percentual),
     rationale: parsed.justificativa_ajuste,
     model,
+    checklistReviews: parsed.checklist_avaliacao.map((review) => ({
+      position: review.posicao,
+      result: review.resultado,
+      rationale: review.justificativa,
+    })),
   };
 }

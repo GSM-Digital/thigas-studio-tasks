@@ -1,0 +1,1 @@
+export const TASK_SUGGESTION_COLUMNS = "id, agency_id, task_id, position, title, description, category, reward_percentage, omission_penalty_percentage, evidence_required, tools, status, evidence, completed_at, verification_status, verification_rationale, verified_at, created_at, updated_at";

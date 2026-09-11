@@ -3,6 +3,26 @@ import type { AiErrorDiagnostic } from "@/lib/ai/error-diagnostics";
 export type AppRole = "developer" | "agency";
 export type TaskStatus = "open" | "in_progress" | "completed" | "approved";
 export type ClassificationStatus = "pending" | "classified" | "failed" | "manual";
+export type TaskSuggestionCategory = "essential" | "recommended" | "value" | "follow_up";
+export type TaskSuggestionStatus = "pending" | "completed" | "not_applicable";
+export type TaskSuggestionVerification = "pending" | "verified" | "rejected" | "not_applicable";
+
+export interface TaskSuggestion {
+  id: string;
+  taskId: string;
+  position: number;
+  title: string;
+  description: string;
+  category: TaskSuggestionCategory;
+  rewardPercentage: number;
+  omissionPenaltyPercentage: number;
+  evidenceRequired: boolean;
+  tools: string[];
+  status: TaskSuggestionStatus;
+  evidence: string | null;
+  verificationStatus: TaskSuggestionVerification;
+  verificationRationale: string | null;
+}
 
 export interface ClientSummary {
   id: string;

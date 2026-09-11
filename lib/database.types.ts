@@ -70,6 +70,28 @@ type TimeEntryRow = {
   created_at: string;
 };
 
+export type TaskSuggestionRow = {
+  id: string;
+  agency_id: string;
+  task_id: string;
+  position: number;
+  title: string;
+  description: string;
+  category: "essential" | "recommended" | "value" | "follow_up";
+  reward_percentage: number;
+  omission_penalty_percentage: number;
+  evidence_required: boolean;
+  tools: string[];
+  status: "pending" | "completed" | "not_applicable";
+  evidence: string | null;
+  completed_at: string | null;
+  verification_status: "pending" | "verified" | "rejected" | "not_applicable";
+  verification_rationale: string | null;
+  verified_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 type BillingCycleRow = {
   id: string;
   agency_id: string;
@@ -108,6 +130,7 @@ export type Database = {
       clients: TableDef<ClientRow>;
       tasks: TableDef<TaskRow>;
       time_entries: TableDef<TimeEntryRow>;
+      task_suggestions: TableDef<TaskSuggestionRow>;
       billing_cycles: TableDef<BillingCycleRow>;
       billing_items: TableDef<BillingItemRow>;
     };

@@ -2,7 +2,7 @@ import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { getServerEnv } from "@/lib/env";
 
 export interface StructuredGenerationRequest {
-  operation: "task_classification" | "jarvis_chat" | "completion_evaluation";
+  operation: "task_classification" | "jarvis_chat" | "completion_evaluation" | "task_suggestions";
   model: string;
   systemInstruction: string;
   prompt: string;

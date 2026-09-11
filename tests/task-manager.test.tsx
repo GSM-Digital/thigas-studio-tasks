@@ -113,7 +113,7 @@ describe("formulário de nova demanda", () => {
       />,
     );
 
-    expect(screen.getByLabelText("Prazo estimado em horas")).toHaveValue(null);
+    expect(screen.getByLabelText("Tempo previsto em horas")).toHaveValue(null);
     fireEvent.change(screen.getByRole("textbox", { name: "Título da nova tarefa" }), {
       target: { value: "Configurar eventos do GA4" },
     });
@@ -123,7 +123,7 @@ describe("formulário de nova demanda", () => {
     fireEvent.click(screen.getByRole("button", { name: "Adicionar" }));
 
     expect(await screen.findByRole("heading", { name: "Configurar eventos do GA4" })).toBeVisible();
-    expect(screen.getByText("Jarvis estimou o SLA em 01:30:00.")).toBeVisible();
+    expect(screen.getByText("Jarvis estimou o tempo necessário em 01:30:00.")).toBeVisible();
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     const request = fetchMock.mock.calls[0]?.[1];
     expect(JSON.parse(String(request?.body))).toMatchObject({
@@ -574,5 +574,28 @@ describe("detalhamento da pontuação na visão Agência", () => {
     expect(screen.getByText("25 + 10 + 3 = 38")).toBeVisible();
     expect(screen.getByText(/resolveu uma incompatibilidade externa relevante/)).toBeVisible();
     expect(screen.getByText(completedTask.completionSummary!)).toBeVisible();
+  });
+});
+
+describe("checklist de sugestões do Jarvis", () => {
+  it("abre a aba, mostra linguagem simples e permite marcar uma sugestão", async () => {
+    const task: TaskView = {
+      id: "suggestion-task", title: "Migrar landing page", description: "Migrar e publicar.",
+      completionSummary: null, completionRationale: null, clientId: demoClients[0]!.id,
+      clientName: demoClients[0]!.name, clientColor: demoClients[0]!.color, status: "open",
+      complexityLevel: 3, basePoints: 25, efficiencyAdjustment: 0, executionAdjustment: 0,
+      points: 25, estimatedDurationSeconds: 14_400, dueAt: "2030-04-20T18:00:00.000Z",
+      completedAt: null, activeTimerStartedAt: null, trackedSeconds: 0, manualDurationSeconds: null,
+      classificationStatus: "classified",
+    };
+    render(<TaskManager initialTasks={[task]} clients={demoClients} viewer={demoViewer} initialSettings={demoSettings} demoMode />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Sugestões do Jarvis/ }));
+    expect(await screen.findByText("Validar antes de publicar")).toBeVisible();
+    expect(screen.getByText("Se não fizer: −10%")).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Comprovação de Validar antes de publicar"), { target: { value: "Testado no computador e no celular." } });
+    fireEvent.click(screen.getByRole("button", { name: "Marcar Validar antes de publicar como realizado" }));
+    expect(screen.getByRole("button", { name: "Desmarcar Validar antes de publicar" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText(/1\/3 realizados/)).toBeVisible();
   });
 });

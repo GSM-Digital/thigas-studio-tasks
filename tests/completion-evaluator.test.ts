@@ -35,9 +35,23 @@ describe("avaliação do relato de conclusão", () => {
     });
     expect(client.generateStructured).toHaveBeenCalledWith(expect.objectContaining({
       operation: "completion_evaluation",
-      maxOutputTokens: 600,
+      maxOutputTokens: 900,
       prompt: expect.not.stringMatching(/Pontos base:|SLA:|Tempo real:/),
     }));
+  });
+
+  it("verifica os itens do checklist sem deixar a IA calcular os pontos", async () => {
+    const evaluation = await evaluateTaskCompletion({
+      ...input,
+      checklist: [{ position: 1, title: "Fazer cópia de segurança", description: "Salvar antes da migração.", category: "essential", status: "completed", evidence: "Cópia salva no painel.", evidenceRequired: true }],
+    }, clientWith({
+      resumo_conclusao: "Fiz a cópia de segurança e concluí a migração com validação.",
+      ajuste_execucao_percentual: 0,
+      justificativa_ajuste: "A entrega seguiu o escopo e não apresentou trabalho adicional fora do previsto.",
+      checklist_avaliacao: [{ posicao: 1, resultado: "verified", justificativa: "A cópia foi informada e comprovada." }],
+    }), "test-model");
+
+    expect(evaluation.checklistReviews).toEqual([{ position: 1, result: "verified", rationale: "A cópia foi informada e comprovada." }]);
   });
 
   it("converte o percentual do Jarvis em pontos de forma determinística", async () => {

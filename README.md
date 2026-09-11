@@ -60,7 +60,8 @@ A migration em `supabase/migrations/` cria:
 - `agencies`: tenant, moeda, fuso horário e valor vigente por ponto;
 - `profiles`: extensão de `auth.users`, com papéis `developer` e `agency`;
 - `clients`: clientes pertencentes à agência;
-- `tasks`: título, descrição/observações, relato de conclusão, SLA, prazo de entrega (`due_at`), nível, pontos base, ajustes de eficiência/execução, pontuação final, status e metadados do Jarvis;
+- `tasks`: título, descrição/observações, relato de conclusão, tempo previsto, prazo de entrega (`due_at`), nível, pontos base, ajustes de eficiência/execução, pontuação final, status e metadados do Jarvis;
+- `task_suggestions`: checklist gamificado por tarefa, bônus possível, desconto por item essencial ignorado, comprovação e verificação final do Jarvis;
 - `time_entries`: sessões imutáveis de cronômetro;
 - `task_time_adjustments`: trilha de auditoria da edição manual;
 - `billing_cycles` e `billing_items`: snapshot financeiro imutável de cada fechamento.
@@ -81,7 +82,11 @@ select cron.schedule(
 
 ## 3. Componente principal da UI
 
-`components/task-manager.tsx` contém a lista minimalista, checkboxes circulares, quick-add com descrição/observações, SLA opcional em horas e prazo de entrega com data/hora, filtro e gerenciador de clientes, cronômetro em tempo real, edição `HH:MM:SS`, valores em BRL, light/dark mode e layouts responsivos. Quando o SLA fica vazio, o Jarvis estima o tempo médio de execução em incrementos de 15 minutos antes de salvar a demanda; qualquer valor digitado pelo usuário tem prioridade. As observações podem ser editadas diretamente no card.
+`components/task-manager.tsx` contém a lista minimalista, seletores circulares, inclusão rápida com descrição/observações, tempo previsto opcional em horas e prazo de entrega com data/hora, filtro e gerenciador de clientes, cronômetro em tempo real, edição `HH:MM:SS`, valores em reais, modos claro e escuro e layouts responsivos. Quando o tempo previsto fica vazio, o Jarvis estima a duração média em incrementos de 15 minutos antes de salvar a demanda; qualquer valor digitado pelo usuário tem prioridade. As observações podem ser editadas diretamente no card.
+
+Cada demanda tem a aba **Sugestões do Jarvis**. A primeira abertura gera de três a seis recomendações específicas; as próximas aberturas usam o conteúdo já salvo para economizar chamadas da API. O desenvolvedor pode marcar o que realizou, registrar uma comprovação ou explicar por que um item não se aplica. Itens opcionais podem gerar bônus; somente itens identificados como essenciais podem gerar desconto quando ignorados. O total positivo do checklist é limitado a 20%.
+
+Ao concluir a demanda, o mesmo checklist aparece para revisão. O Jarvis compara o relato e as comprovações, confirma ou rejeita cada item e o sistema calcula os pontos de forma determinística. O uso de inteligência artificial ou automação não reduz pontos por si só: autoria, revisão e validação continuam sendo os critérios. A interface e os textos gerados priorizam português simples; termos técnicos inevitáveis são explicados na primeira ocorrência.
 
 - **Desenvolvedor:** cria, conclui/reabre, inicia/para, corrige o tempo, troca o cliente ou o prazo diretamente no card e exclui tarefas em aberto com confirmação. Ao concluir, um modal obrigatório registra como foi a execução; se o timer estiver ativo, ele é parado antes do preenchimento. Enquanto houver qualquer cronômetro ativo, o favicon muda para um círculo vermelho e volta ao ícone normal ao parar o último timer.
 - **Prioridade inteligente:** as pendências são ordenadas pelo último momento seguro para começar (`prazo − duração estimada ajustada ao risco`). A margem adicional é de 0% no nível 1, 15% no nível 2, 30% no nível 3 e 50% no nível 4. Ao editar o prazo, a lista é recalculada e reordenada imediatamente. Prazos ausentes ou inválidos ficam no fim.
