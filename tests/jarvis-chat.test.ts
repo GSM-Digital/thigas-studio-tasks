@@ -125,4 +125,100 @@ describe("conversa do Jarvis", () => {
       },
     });
   });
+
+  it("transforma uma demanda para agora em início imediato sem perguntar o prazo", async () => {
+    const client = clientWith({
+      acao: "perguntar",
+      resposta: "Até quando essa demanda precisa ser entregue?",
+      titulo: "Adicionar CNPJ, telefone e razão social nas três LPs",
+      descricao: null,
+      cliente_nome: "Chevrolet Auto Rio",
+      prazo_estimado_segundos: 5400,
+      prazo_entrega_iso: "2030-04-17T12:00:02.000Z",
+      nivel_complexidade: 1,
+      pontos_base: 4,
+      justificativa: "Alteração de conteúdo repetida em três landing pages existentes.",
+      campos_faltantes: ["prazo_entrega"],
+    });
+
+    const decision = await interpretJarvisConversation(
+      [{
+        role: "user",
+        content: "Adicione CNPJ, telefone e razão social nas três LPs da Chevrolet Auto Rio. Vou fazer agora para agora.",
+      }],
+      clients,
+      { now, model: "gemini-3.6-flash", client },
+    );
+
+    expect(decision).toMatchObject({
+      action: "create_task",
+      task: {
+        clientName: "Chevrolet Auto Rio",
+        estimatedDurationSeconds: 5400,
+        dueAt: "2030-04-17T13:30:00.000Z",
+      },
+    });
+    expect(client.generateStructured).toHaveBeenCalledWith(expect.objectContaining({
+      systemInstruction: expect.stringContaining("Para agora"),
+    }));
+  });
+
+  it("preserva um horário limite explícito mesmo quando o trabalho começa agora", async () => {
+    const decision = await interpretJarvisConversation(
+      [{ role: "user", content: "É urgente, vou fazer agora e preciso terminar até 14h para a Make One." }],
+      clients,
+      {
+        now,
+        model: "gemini-3.6-flash",
+        client: clientWith({
+          acao: "criar_tarefa",
+          resposta: "Entendi.",
+          titulo: "Corrigir demanda urgente",
+          descricao: null,
+          cliente_nome: "Make One",
+          prazo_estimado_segundos: 3600,
+          prazo_entrega_iso: "2030-04-17T14:00:00.000Z",
+          nivel_complexidade: 2,
+          pontos_base: 8,
+          justificativa: "Correção moderada que exige análise e validação.",
+          campos_faltantes: [],
+        }),
+      },
+    );
+
+    expect(decision).toMatchObject({
+      action: "create_task",
+      task: { dueAt: "2030-04-17T14:00:00.000Z" },
+    });
+  });
+
+  it("não confunde uma tarefa urgente para amanhã com início imediato", async () => {
+    const decision = await interpretJarvisConversation(
+      [{ role: "user", content: "Tenho uma tarefa urgente para amanhã da Make One." }],
+      clients,
+      {
+        now,
+        model: "gemini-3.6-flash",
+        client: clientWith({
+          acao: "perguntar",
+          resposta: "Qual é o horário limite de amanhã?",
+          titulo: "Executar tarefa urgente",
+          descricao: null,
+          cliente_nome: "Make One",
+          prazo_estimado_segundos: 3600,
+          prazo_entrega_iso: null,
+          nivel_complexidade: 2,
+          pontos_base: 8,
+          justificativa: "Tarefa moderada que exige execução e validação.",
+          campos_faltantes: ["prazo_entrega"],
+        }),
+      },
+    );
+
+    expect(decision).toEqual({
+      action: "ask",
+      message: "Qual é o horário limite de amanhã?",
+      missingFields: ["prazo_entrega"],
+    });
+  });
 });
