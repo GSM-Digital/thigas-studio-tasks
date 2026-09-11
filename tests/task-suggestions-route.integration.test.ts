@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ from: vi.fn(), generate: vi.fn() }));
+vi.mock("@/lib/ai/suggestion-learning-history", () => ({ loadSuggestionLearningHistory: vi.fn().mockResolvedValue([]) }));
 vi.mock("@/lib/auth", () => ({
   requireViewer: vi.fn().mockResolvedValue({ id: "11111111-1111-4111-8111-111111111111", agencyId: "22222222-2222-4222-8222-222222222222", role: "developer", name: "Dev" }),
   requireDeveloper: vi.fn(),
@@ -56,6 +57,7 @@ describe("POST /api/tasks/[taskId]/suggestions", () => {
     const response = await POST(new Request(`http://localhost/api/tasks/${taskId}/suggestions`, { method: "POST" }), { params: Promise.resolve({ taskId }) });
     expect(response.status).toBe(201);
     expect(insertQuery.insert).toHaveBeenCalledWith([expect.objectContaining({ task_id: taskId, position: 1, reward_percentage: 3 })]);
+    expect(mocks.generate).toHaveBeenCalledWith(expect.objectContaining({ learningHistory: [] }));
     await expect(response.json()).resolves.toMatchObject({ cached: false, suggestions: [{ category: "essential" }] });
   });
 });

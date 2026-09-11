@@ -833,6 +833,7 @@ function TaskRow({ task, clients, settings, demoMode, onMutate, onRemove }: { ta
   const [suggestions, setSuggestions] = useState<TaskSuggestion[] | null>(null);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
+  const [suggestionsNotice, setSuggestionsNotice] = useState<string | null>(null);
   const [savingSuggestionId, setSavingSuggestionId] = useState<string | null>(null);
   const [evidenceDrafts, setEvidenceDrafts] = useState<Record<string, string>>({});
   const completionSpeech = useSpeechDictation({
@@ -904,6 +905,7 @@ function TaskRow({ task, clients, settings, demoMode, onMutate, onRemove }: { ta
     }
     setSavingSuggestionId(suggestion.id);
     setSuggestionsError(null);
+    setSuggestionsNotice(null);
     try {
       const updated = demoMode
         ? { ...suggestion, status, evidence: evidence?.trim() || null }
@@ -913,6 +915,9 @@ function TaskRow({ task, clients, settings, demoMode, onMutate, onRemove }: { ta
           })).suggestion;
       setSuggestions((current) => current?.map((item) => item.id === updated.id ? updated : item) ?? [updated]);
       setEvidenceDrafts((current) => ({ ...current, [updated.id]: updated.evidence ?? "" }));
+      if (status === "not_applicable") {
+        setSuggestionsNotice("Entendido. O Jarvis vai considerar este motivo em demandas semelhantes.");
+      }
     } catch (error) {
       setSuggestionsError(error instanceof Error ? error.message : "Não foi possível atualizar o checklist.");
     } finally {
@@ -1211,6 +1216,7 @@ function TaskRow({ task, clients, settings, demoMode, onMutate, onRemove }: { ta
           <div className="suggestions-panel">
             {loadingSuggestions && <p className="suggestions-state"><LoaderCircle className="spin" /> Jarvis está preparando sugestões para esta demanda...</p>}
             {suggestionsError && <p className="suggestions-error" role="alert">{suggestionsError}</p>}
+            {suggestionsNotice && <p className="suggestions-notice" role="status">{suggestionsNotice}</p>}
             {suggestions && suggestions.length > 0 && (
               <TaskSuggestionsChecklist
                 suggestions={suggestions}
@@ -1257,6 +1263,7 @@ function TaskRow({ task, clients, settings, demoMode, onMutate, onRemove }: { ta
               </div>
             )}
             {suggestionsError && <p className="suggestions-error" role="alert">{suggestionsError}</p>}
+            {suggestionsNotice && <p className="suggestions-notice" role="status">{suggestionsNotice}</p>}
             <form onSubmit={completeTask}>
               <label htmlFor={`completion-summary-${task.id}`}>Conte livremente como foi a entrega</label>
               <div className="completion-input-wrap">

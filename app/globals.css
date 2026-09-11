@@ -175,6 +175,7 @@ button { color: inherit; }
 .suggestions-state { display: flex; align-items: center; gap: 8px; margin: 6px; color: var(--muted); font-size: var(--font-min); }
 .suggestions-state svg { width: 15px; }
 .suggestions-error { margin: 6px 5px 10px; padding: 9px 11px; border-radius: 8px; color: #ff9f0a; background: rgba(255,159,10,.1); font-size: var(--font-min); line-height: 1.45; }
+.suggestions-notice { margin: 6px 5px 10px; padding: 9px 11px; border-radius: 8px; color: var(--green); background: color-mix(in srgb, var(--green) 10%, transparent); font-size: var(--font-min); line-height: 1.45; }
 .suggestion-list { display: grid; }
 .suggestion-item { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; padding: 11px 8px; }
 .suggestion-item + .suggestion-item { border-top: 1px solid var(--line); }

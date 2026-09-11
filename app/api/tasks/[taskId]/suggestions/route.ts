@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createAiErrorDiagnostic } from "@/lib/ai/error-diagnostics";
 import { generateTaskSuggestions } from "@/lib/ai/task-suggestions";
+import { loadSuggestionLearningHistory } from "@/lib/ai/suggestion-learning-history";
 import { requireDeveloper, requireViewer } from "@/lib/auth";
 import { ApiError, jsonError } from "@/lib/http";
 import { mapTaskSuggestion } from "@/lib/domain/task-suggestions";
@@ -51,7 +52,10 @@ export async function POST(_request: Request, context: { params: Promise<{ taskI
     if (task.status === "completed" || task.status === "approved") {
       throw new ApiError(409, "TASK_FINALIZED", "As sugestões precisam ser criadas antes da conclusão.");
     }
-    const { data: client } = await supabase.from("clients").select("name").eq("id", task.client_id).maybeSingle();
+    const [{ data: client }, learningHistory] = await Promise.all([
+      supabase.from("clients").select("name").eq("id", task.client_id).maybeSingle(),
+      loadSuggestionLearningHistory({ supabase, agencyId: viewer.agencyId, currentTaskId: taskId }),
+    ]);
 
     let generated;
     try {
@@ -62,11 +66,16 @@ export async function POST(_request: Request, context: { params: Promise<{ taskI
         complexityLevel: task.complexity_level,
         estimatedDurationSeconds: task.estimated_duration_seconds,
         dueAt: task.due_at,
+        learningHistory,
       });
     } catch (error) {
       const diagnostic = createAiErrorDiagnostic(error);
       console.error("Jarvis suggestions failed", diagnostic);
       throw new ApiError(502, "SUGGESTIONS_AI_FAILED", diagnostic.title, { diagnostic });
+    }
+
+    if (generated.length === 0) {
+      return Response.json({ suggestions: [], cached: false, learned: true });
     }
 
     const { error: insertError } = await supabase.from("task_suggestions").insert(
