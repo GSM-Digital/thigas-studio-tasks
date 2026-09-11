@@ -142,4 +142,42 @@ describe("painel do Jarvis", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Permita o acesso ao microfone para usar o ditado.");
     expect(screen.getByRole("button", { name: "Ditar demanda" })).toBeEnabled();
   });
+
+  it("explica e permite copiar um erro de cota devolvido pelo Jarvis", async () => {
+    const diagnostic = {
+      referenceId: "JRV-CHAT1234",
+      provider: "Gemini",
+      category: "quota_exhausted",
+      status: 429,
+      code: "RESOURCE_EXHAUSTED",
+      title: "Cota ou créditos da API esgotados",
+      message: "O Gemini informou que a cota disponível foi consumida.",
+      technicalDetail: "ApiError: Daily quota exceeded",
+      occurredAt: "2026-09-11T12:00:00.000Z",
+    };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      error: { code: diagnostic.code, message: diagnostic.message, details: { diagnostic } },
+    }), { status: 429, headers: { "content-type": "application/json" } }));
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+
+    render(
+      <TaskManager
+        initialTasks={[]}
+        clients={demoClients}
+        viewer={demoViewer}
+        initialSettings={demoSettings}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Jarvis" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Mensagem para o Jarvis" }), {
+      target: { value: "Analise esta demanda." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Enviar mensagem" }));
+
+    expect(await screen.findByText("Cota ou créditos da API esgotados")).toBeVisible();
+    expect(screen.getByText(/HTTP 429 · RESOURCE_EXHAUSTED · JRV-CHAT1234/)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Copiar diagnóstico do Jarvis" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining("Referência: JRV-CHAT1234")));
+  });
 });

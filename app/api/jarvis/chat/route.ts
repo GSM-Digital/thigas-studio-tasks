@@ -3,6 +3,8 @@ import {
   interpretJarvisConversation,
   type JarvisChatMessage,
 } from "@/lib/ai/jarvis-chat";
+import { createAiErrorDiagnostic } from "@/lib/ai/error-diagnostics";
+import { logAiError } from "@/lib/ai/task-evaluation-error";
 import { requireDeveloper, requireViewer } from "@/lib/auth";
 import { resolveOrCreateClient } from "@/lib/clients/resolve";
 import { ApiError, jsonError, parseJson } from "@/lib/http";
@@ -56,8 +58,14 @@ export async function POST(request: Request) {
         { timezone: agencyResult.data.timezone },
       );
     } catch (error) {
-      console.error("Jarvis conversation failed", error);
-      throw new ApiError(502, "JARVIS_UNAVAILABLE", "O Jarvis está indisponível no momento. Tente novamente.");
+      const diagnostic = createAiErrorDiagnostic(error);
+      logAiError("Jarvis conversation failed", diagnostic);
+      throw new ApiError(
+        diagnostic.category === "quota_exhausted" || diagnostic.category === "rate_limited" ? 429 : 503,
+        diagnostic.code,
+        diagnostic.message,
+        { diagnostic },
+      );
     }
 
     if (decision.action === "ask") {

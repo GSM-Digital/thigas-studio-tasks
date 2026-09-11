@@ -141,4 +141,38 @@ describe("POST /api/jarvis/chat", () => {
       clientCreated: false,
     });
   });
+
+  it("devolve um diagnóstico sanitizado quando a IA falha", async () => {
+    const agencies = agencyQuery();
+    const clients = clientsQuery();
+    mocks.from.mockImplementation((table: string) => ({ agencies, clients })[table as "agencies" | "clients"]);
+    mocks.interpret.mockRejectedValue(Object.assign(
+      new Error('{"error":{"code":429,"status":"RESOURCE_EXHAUSTED","message":"Daily quota exceeded"}}'),
+      { status: 429 },
+    ));
+
+    const response = await POST(new Request("http://localhost/api/jarvis/chat", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages: [{ role: "user", content: "Crie uma demanda de GA4." }] }),
+    }));
+    const body = await response.json();
+
+    expect(response.status).toBe(429);
+    expect(body).toMatchObject({
+      error: {
+        code: "RESOURCE_EXHAUSTED",
+        details: {
+          diagnostic: {
+            provider: "Gemini",
+            category: "quota_exhausted",
+            status: 429,
+            code: "RESOURCE_EXHAUSTED",
+            title: "Cota ou créditos da API esgotados",
+          },
+        },
+      },
+    });
+    expect(body.error.details.diagnostic.technicalDetail).not.toContain("AIza");
+  });
 });

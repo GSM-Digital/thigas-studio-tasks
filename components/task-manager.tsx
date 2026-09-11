@@ -76,6 +76,7 @@ interface JarvisUiMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
+  diagnostic?: AiErrorDiagnostic | null;
 }
 
 const ACTIVE_TIMER_FAVICON = `data:image/svg+xml,${encodeURIComponent(
@@ -118,6 +119,40 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
     );
   }
   return body;
+}
+
+function JarvisErrorDiagnostic({ diagnostic }: { diagnostic: AiErrorDiagnostic }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copyDiagnostic() {
+    const log = formatAiErrorLog(diagnostic);
+    try {
+      await navigator.clipboard.writeText(log);
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = log;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.append(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      textarea.remove();
+    }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2_000);
+  }
+
+  return (
+    <div className={`jarvis-error-diagnostic category-${diagnostic.category}`}>
+      <strong>{diagnostic.title}</strong>
+      <p>{diagnostic.message}</p>
+      <code>{diagnostic.provider} · HTTP {diagnostic.status ?? "N/D"} · {diagnostic.code} · {diagnostic.referenceId}</code>
+      <button type="button" onClick={() => void copyDiagnostic()} aria-label="Copiar diagnóstico do Jarvis">
+        {copied ? <Check /> : <Copy />}
+        {copied ? "Copiado" : "Copiar diagnóstico"}
+      </button>
+    </div>
+  );
 }
 
 function billingWindow(now = new Date()): { start: Date; end: Date } {
@@ -444,12 +479,14 @@ function JarvisPanel({
         onTaskCreated(result.task, resolvedClient, Boolean(result.clientCreated));
       }
     } catch (error) {
+      const diagnostic = error instanceof ApiRequestError ? error.diagnostic : null;
       setMessages((current) => [
         ...current,
         {
           id: crypto.randomUUID(),
           role: "assistant",
-          content: error instanceof Error ? error.message : "Não consegui processar a mensagem. Tente novamente.",
+          content: diagnostic?.title ?? (error instanceof Error ? error.message : "Não consegui processar a mensagem. Tente novamente."),
+          diagnostic,
         },
       ]);
     } finally {
@@ -475,10 +512,14 @@ function JarvisPanel({
           {messages.map((message) => (
             <div className={`jarvis-message ${message.role}`} key={message.id}>
               {message.role === "assistant" && <span className="jarvis-avatar"><Sparkles /></span>}
-              <p>{message.content}</p>
+              <div className="jarvis-message-content">
+                {message.diagnostic
+                  ? <JarvisErrorDiagnostic diagnostic={message.diagnostic} />
+                  : <p>{message.content}</p>}
+              </div>
             </div>
           ))}
-          {sending && <div className="jarvis-message assistant"><span className="jarvis-avatar"><Sparkles /></span><p className="jarvis-thinking"><i /><i /><i /></p></div>}
+          {sending && <div className="jarvis-message assistant"><span className="jarvis-avatar"><Sparkles /></span><div className="jarvis-message-content"><p className="jarvis-thinking"><i /><i /><i /></p></div></div>}
           <div ref={messagesEnd} />
         </div>
         <form className="jarvis-composer" onSubmit={sendMessage}>
@@ -709,7 +750,6 @@ function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskVi
   const [preparingCompletion, setPreparingCompletion] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [reevaluating, setReevaluating] = useState(false);
-  const [diagnosticCopied, setDiagnosticCopied] = useState(false);
   const completionSpeech = useSpeechDictation({
     value: completionInput,
     onChange: setCompletionInput,
@@ -813,25 +853,6 @@ function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskVi
       { optimistic: false },
     );
     setReevaluating(false);
-  }
-
-  async function copyJarvisDiagnostic() {
-    if (!task.classificationError) return;
-    const log = formatAiErrorLog(task.classificationError);
-    try {
-      await navigator.clipboard.writeText(log);
-    } catch {
-      const textarea = document.createElement("textarea");
-      textarea.value = log;
-      textarea.style.position = "fixed";
-      textarea.style.opacity = "0";
-      document.body.append(textarea);
-      textarea.select();
-      document.execCommand("copy");
-      textarea.remove();
-    }
-    setDiagnosticCopied(true);
-    window.setTimeout(() => setDiagnosticCopied(false), 2_000);
   }
 
   function toggleTimer() {
@@ -961,15 +982,7 @@ function TaskRow({ task, clients, settings, onMutate, onRemove }: { task: TaskVi
                 </div>
               )}
               {task.classificationStatus === "failed" && task.classificationError && !reevaluating && (
-                <div className={`jarvis-error-diagnostic category-${task.classificationError.category}`}>
-                  <strong>{task.classificationError.title}</strong>
-                  <p>{task.classificationError.message}</p>
-                  <code>{task.classificationError.provider} · HTTP {task.classificationError.status ?? "N/D"} · {task.classificationError.code} · {task.classificationError.referenceId}</code>
-                  <button type="button" onClick={() => void copyJarvisDiagnostic()} aria-label="Copiar diagnóstico do Jarvis">
-                    {diagnosticCopied ? <Check /> : <Copy />}
-                    {diagnosticCopied ? "Copiado" : "Copiar diagnóstico"}
-                  </button>
-                </div>
+                <JarvisErrorDiagnostic diagnostic={task.classificationError} />
               )}
             </div>
           </div>
