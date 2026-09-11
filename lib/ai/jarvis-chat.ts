@@ -200,6 +200,7 @@ export async function interpretJarvisConversation(
     .join("\n");
   const immediateStart = hasImmediateStartIntent(messages);
 
+  let usedModel = model;
   const result = await client.generateStructured({
     operation: "jarvis_chat",
     model,
@@ -215,6 +216,7 @@ export async function interpretJarvisConversation(
     responseJsonSchema: jarvisChatOutputJsonSchema,
     maxOutputTokens: 520,
     timeoutMs: 15_000,
+    onModelUsed: (selectedModel) => { usedModel = selectedModel; },
   });
 
   const output = jarvisChatOutputSchema.parse(result);
@@ -278,7 +280,7 @@ export async function interpretJarvisConversation(
         efficiencyAdjustment: 0,
         finalPoints: basePoints,
         rationale: output.justificativa,
-        model,
+        model: usedModel,
       },
     },
   };

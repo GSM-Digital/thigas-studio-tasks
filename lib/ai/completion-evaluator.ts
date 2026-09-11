@@ -130,6 +130,7 @@ export async function evaluateTaskCompletion(
   client: StructuredGenerationClient = createGeminiStructuredClient(),
   model = getServerEnv().GEMINI_CLASSIFICATION_MODEL,
 ): Promise<CompletionEvaluation> {
+  let usedModel = model;
   const output = await client.generateStructured({
     operation: "completion_evaluation",
     model,
@@ -143,6 +144,7 @@ export async function evaluateTaskCompletion(
     responseJsonSchema: completionJsonSchema,
     maxOutputTokens: 900,
     timeoutMs: 12_000,
+    onModelUsed: (selectedModel) => { usedModel = selectedModel; },
   });
   const parsed = completionOutputSchema.parse(output);
   return {
@@ -150,7 +152,7 @@ export async function evaluateTaskCompletion(
     percentage: parsed.ajuste_execucao_percentual,
     adjustment: calculateExecutionAdjustment(input.basePoints, parsed.ajuste_execucao_percentual),
     rationale: parsed.justificativa_ajuste,
-    model,
+    model: usedModel,
     checklistReviews: parsed.checklist_avaliacao.map((review) => ({
       position: review.posicao,
       result: review.resultado,

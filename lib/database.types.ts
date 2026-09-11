@@ -115,6 +115,18 @@ type BillingItemRow = {
   created_at: string;
 };
 
+export type AiModelFailoverStateRow = {
+  provider: "gemini";
+  primary_model: string;
+  fallback_model: string;
+  fallback_until: string | null;
+  last_quota_error_at: string | null;
+  last_quota_error_code: string | null;
+  last_recovered_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 type TableDef<Row, Insert = Partial<Row>, Update = Partial<Insert>> = {
   Row: Row;
   Insert: Insert;
@@ -133,6 +145,7 @@ export type Database = {
       task_suggestions: TableDef<TaskSuggestionRow>;
       billing_cycles: TableDef<BillingCycleRow>;
       billing_items: TableDef<BillingItemRow>;
+      ai_model_failover_state: TableDef<AiModelFailoverStateRow>;
     };
     Views: Record<string, never>;
     Functions: {

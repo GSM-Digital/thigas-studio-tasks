@@ -148,6 +148,7 @@ export async function classifyTask(
   const providedEstimate = input.estimatedDurationSeconds ?? null;
   const selectedClient = input.clients?.find((item) => item.id === input.selectedClientId) ?? null;
   const clientCatalog = input.clients?.map((item) => item.name) ?? [];
+  let usedModel = model;
   const output = await client.generateStructured({
     operation: "task_classification",
     model,
@@ -163,6 +164,7 @@ export async function classifyTask(
     responseJsonSchema: classifierAiOutputJsonSchema,
     maxOutputTokens: 360,
     timeoutMs: 12_000,
+    onModelUsed: (selectedModel) => { usedModel = selectedModel; },
   });
 
   const parsed = classifierAiOutputSchema.parse(output);
@@ -187,7 +189,7 @@ export async function classifyTask(
     efficiencyAdjustment: efficiency.adjustment,
     finalPoints: efficiency.finalPoints,
     rationale: parsed.justificativa,
-    model,
+    model: usedModel,
     estimatedDurationSeconds,
     estimateSource: providedEstimate ? "user" : "jarvis",
     clientName: selectedClient?.name ?? parsed.cliente_nome,
