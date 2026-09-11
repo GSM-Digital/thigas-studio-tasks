@@ -95,6 +95,10 @@ describe("painel do Jarvis", () => {
       "/api/jarvis/chat",
       expect.objectContaining({ method: "POST" }),
     ));
+    const request = vi.mocked(globalThis.fetch).mock.calls[0]?.[1];
+    expect(JSON.parse(String(request?.body)).messages).toEqual([
+      { role: "user", content: "Crie uma demanda de GA4 para amanhã às 15h, estimativa de 2 horas." },
+    ]);
   });
 
   it("transcreve uma demanda ditada em português antes do envio", async () => {

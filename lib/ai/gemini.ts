@@ -2,6 +2,7 @@ import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { getServerEnv } from "@/lib/env";
 
 export interface StructuredGenerationRequest {
+  operation: "task_classification" | "jarvis_chat" | "completion_evaluation";
   model: string;
   systemInstruction: string;
   prompt: string;
@@ -53,6 +54,18 @@ export function createGeminiStructuredClient(): StructuredGenerationClient {
               httpOptions: { timeout: input.timeoutMs ?? 15_000 },
             },
           });
+          const usage = response.usageMetadata;
+          if (usage) {
+            console.info("Jarvis AI usage", {
+              operation: input.operation,
+              model: input.model,
+              promptTokens: usage.promptTokenCount ?? 0,
+              outputTokens: usage.candidatesTokenCount ?? 0,
+              thoughtTokens: usage.thoughtsTokenCount ?? 0,
+              cachedTokens: usage.cachedContentTokenCount ?? 0,
+              totalTokens: usage.totalTokenCount ?? 0,
+            });
+          }
           const text = response.text?.trim();
           if (!text) throw new Error("Gemini não retornou conteúdo estruturado.");
           return JSON.parse(text) as unknown;

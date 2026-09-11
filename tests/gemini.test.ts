@@ -23,10 +23,21 @@ describe("cliente estruturado do Gemini", () => {
   });
 
   it("solicita JSON estruturado e converte a resposta", async () => {
-    mocks.generateContent.mockResolvedValue({ text: '{"nivel_complexidade":2}' });
+    mocks.generateContent.mockResolvedValue({
+      text: '{"nivel_complexidade":2}',
+      usageMetadata: {
+        promptTokenCount: 180,
+        candidatesTokenCount: 32,
+        thoughtsTokenCount: 8,
+        cachedContentTokenCount: 0,
+        totalTokenCount: 220,
+      },
+    });
+    const usageLog = vi.spyOn(console, "info").mockImplementation(() => undefined);
     const client = createGeminiStructuredClient();
 
     await expect(client.generateStructured({
+      operation: "task_classification",
       model: "gemini-3.6-flash",
       systemInstruction: "Responda somente JSON.",
       prompt: "Configurar GA4",
@@ -45,6 +56,16 @@ describe("cliente estruturado do Gemini", () => {
         thinkingConfig: { thinkingLevel: "MINIMAL" },
       }),
     }));
+    expect(usageLog).toHaveBeenCalledWith("Jarvis AI usage", {
+      operation: "task_classification",
+      model: "gemini-3.6-flash",
+      promptTokens: 180,
+      outputTokens: 32,
+      thoughtTokens: 8,
+      cachedTokens: 0,
+      totalTokens: 220,
+    });
+    usageLog.mockRestore();
   });
 
   it("falha de forma explícita quando o modelo não retorna conteúdo", async () => {
@@ -52,6 +73,7 @@ describe("cliente estruturado do Gemini", () => {
     const client = createGeminiStructuredClient();
 
     await expect(client.generateStructured({
+      operation: "task_classification",
       model: "gemini-3.6-flash",
       systemInstruction: "Responda somente JSON.",
       prompt: "Teste",

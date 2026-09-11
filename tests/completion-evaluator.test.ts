@@ -20,11 +20,12 @@ function clientWith(output: Record<string, unknown>): StructuredGenerationClient
 
 describe("avaliação do relato de conclusão", () => {
   it("não concede bônus para execução normal", async () => {
-    const evaluation = await evaluateTaskCompletion(input, clientWith({
+    const client = clientWith({
       resumo_conclusao: "Concluí a integração e validei o funcionamento previsto no escopo.",
       ajuste_execucao_percentual: 0,
       justificativa_ajuste: "O relato descreve somente a execução e a validação já previstas no escopo original.",
-    }), "test-model");
+    });
+    const evaluation = await evaluateTaskCompletion(input, client, "test-model");
 
     expect(evaluation).toMatchObject({
       summary: "Concluí a integração e validei o funcionamento previsto no escopo.",
@@ -32,6 +33,11 @@ describe("avaliação do relato de conclusão", () => {
       adjustment: 0,
       model: "test-model",
     });
+    expect(client.generateStructured).toHaveBeenCalledWith(expect.objectContaining({
+      operation: "completion_evaluation",
+      maxOutputTokens: 600,
+      prompt: expect.not.stringMatching(/Pontos base:|SLA:|Tempo real:/),
+    }));
   });
 
   it("converte o percentual do Jarvis em pontos de forma determinística", async () => {

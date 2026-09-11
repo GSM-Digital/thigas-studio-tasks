@@ -15,26 +15,26 @@ function clientWith(output: Record<string, unknown>): JarvisChatClient {
 
 describe("conversa do Jarvis", () => {
   it("prepara uma tarefa completa com classificação validada", async () => {
+    const client = clientWith({
+      acao: "criar_tarefa",
+      resposta: "Entendi a demanda.",
+      titulo: "Configurar GA4",
+      descricao: "Validar todos os eventos no modo debug.",
+      cliente_nome: "Make One",
+      prazo_estimado_segundos: 7200,
+      prazo_entrega_iso: "2030-04-18T15:00:00-03:00",
+      nivel_complexidade: 2,
+      pontos_base: 10,
+      justificativa: "Configuração de ferramenta externa com validação de eventos e scripts.",
+      campos_faltantes: [],
+    });
     const decision = await interpretJarvisConversation(
       [{ role: "user", content: "Configure o GA4 da Make One amanhã às 15h. Estimo 2 horas." }],
       clients,
       {
         now,
         model: "gemini-3.6-flash",
-        client: clientWith({
-          acao: "criar_tarefa",
-          resposta: "Entendi a demanda.",
-          titulo: "Configurar GA4",
-          descricao: "Validar todos os eventos no modo debug.",
-          cliente_id: clients[0]!.id,
-          cliente_nome: "Make One",
-          prazo_estimado_segundos: 7200,
-          prazo_entrega_iso: "2030-04-18T15:00:00-03:00",
-          nivel_complexidade: 2,
-          pontos_base: 10,
-          justificativa: "Configuração de ferramenta externa com validação de eventos e scripts.",
-          campos_faltantes: [],
-        }),
+        client,
       },
     );
 
@@ -55,6 +55,11 @@ describe("conversa do Jarvis", () => {
         },
       },
     });
+    expect(client.generateStructured).toHaveBeenCalledWith(expect.objectContaining({
+      operation: "jarvis_chat",
+      maxOutputTokens: 520,
+      prompt: expect.not.stringContaining(clients[0]!.id),
+    }));
   });
 
   it("estima o tempo e pergunta apenas cliente e prazo quando eles faltam", async () => {
@@ -69,7 +74,6 @@ describe("conversa do Jarvis", () => {
           resposta: "Para qual cliente e até quando devo entregar? Informe data e hora.",
           titulo: "Configurar GA4",
           descricao: null,
-          cliente_id: null,
           cliente_nome: null,
           prazo_estimado_segundos: null,
           prazo_entrega_iso: null,
@@ -100,7 +104,6 @@ describe("conversa do Jarvis", () => {
           resposta: "Tudo pronto.",
           titulo: "Implementar formulário LP",
           descricao: null,
-          cliente_id: null,
           cliente_nome: "Full Body",
           prazo_estimado_segundos: 7200,
           prazo_entrega_iso: "2030-04-18T15:00:00-03:00",

@@ -6,7 +6,7 @@ import {
 import { isValidPointsForLevel } from "@/lib/domain/points";
 import { findClientByName } from "@/lib/domain/client";
 import { getServerEnv } from "@/lib/env";
-import { JARVIS_EVALUATION_GUIDE } from "@/lib/ai/classifier";
+import { JARVIS_COMPLEXITY_GUIDE } from "@/lib/ai/classifier";
 import type { ClientSummary, TaskClassification } from "@/lib/types";
 
 const missingFieldSchema = z.enum([
@@ -20,7 +20,6 @@ export const jarvisChatOutputSchema = z.object({
   resposta: z.string().min(1).max(600),
   titulo: z.string().max(240).nullable(),
   descricao: z.string().max(4_000).nullable(),
-  cliente_id: z.string().nullable(),
   cliente_nome: z.string().trim().min(2).max(120).nullable(),
   prazo_estimado_segundos: z.number().int().min(900).max(1_440_000).nullable(),
   prazo_entrega_iso: z.string().nullable(),
@@ -69,7 +68,6 @@ const jarvisChatOutputJsonSchema = {
     "resposta",
     "titulo",
     "descricao",
-    "cliente_id",
     "cliente_nome",
     "prazo_estimado_segundos",
     "prazo_entrega_iso",
@@ -83,7 +81,6 @@ const jarvisChatOutputJsonSchema = {
     "resposta",
     "titulo",
     "descricao",
-    "cliente_id",
     "cliente_nome",
     "prazo_estimado_segundos",
     "prazo_entrega_iso",
@@ -97,7 +94,6 @@ const jarvisChatOutputJsonSchema = {
     resposta: { type: "string" },
     titulo: nullableString,
     descricao: nullableString,
-    cliente_id: nullableString,
     cliente_nome: nullableString,
     prazo_estimado_segundos: { type: ["integer", "null"], minimum: 900, maximum: 1_440_000 },
     prazo_entrega_iso: nullableString,
@@ -114,15 +110,15 @@ const jarvisChatOutputJsonSchema = {
   },
 } as const;
 
-const CHAT_INSTRUCTIONS = `${JARVIS_EVALUATION_GUIDE}
+const CHAT_INSTRUCTIONS = `${JARVIS_COMPLEXITY_GUIDE}
 
 Você também atua como assistente de entrada de demandas. Analise toda a conversa e decida entre:
 - "perguntar": quando faltar a tarefa, um cliente identificável ou a data/hora de entrega.
 - "criar_tarefa": quando esses dados estiverem inequívocos. A estimativa de execução nunca é obrigatória: estime-a quando o usuário não informar.
 
 Regras obrigatórias:
-- Se o cliente já estiver na lista, use seu ID e repita exatamente o nome do catálogo.
-- Se o usuário mencionar explicitamente um cliente que não está na lista, retorne cliente_id null e preserve o nome em cliente_nome. A aplicação fará o cadastro automático.
+- Se o cliente já estiver na lista, repita exatamente o nome do catálogo.
+- Se o usuário mencionar explicitamente um cliente que não está na lista, preserve o nome em cliente_nome. A aplicação fará o cadastro automático.
 - Nunca invente um cliente quando ele não estiver explícito na conversa.
 - Interprete expressões como "amanhã", "sexta" e "às 15h" usando a data/hora e o fuso informados.
 - O prazo estimado é a quantidade de trabalho prevista (por exemplo, 2 horas). O prazo de entrega é a data e hora limite.
@@ -163,12 +159,13 @@ export async function interpretJarvisConversation(
   const timezone = options.timezone ?? "America/Sao_Paulo";
   const model = options.model ?? getServerEnv().GEMINI_CLASSIFICATION_MODEL;
   const client = options.client ?? createGeminiStructuredClient();
-  const clientCatalog = clients.map((item) => ({ id: item.id, nome: item.name }));
+  const clientCatalog = clients.map((item) => item.name);
   const conversation = messages
     .map((message) => `${message.role === "user" ? "Usuário" : "Jarvis"}: ${message.content}`)
     .join("\n");
 
   const result = await client.generateStructured({
+    operation: "jarvis_chat",
     model,
     systemInstruction: CHAT_INSTRUCTIONS,
     prompt: [
@@ -180,7 +177,7 @@ export async function interpretJarvisConversation(
       conversation,
     ].join("\n"),
     responseJsonSchema: jarvisChatOutputJsonSchema,
-    maxOutputTokens: 700,
+    maxOutputTokens: 520,
     timeoutMs: 15_000,
   });
 
@@ -188,11 +185,10 @@ export async function interpretJarvisConversation(
   if (output.acao !== "criar_tarefa") return fallbackQuestion(output);
 
   const title = output.titulo?.trim();
-  const clientById = clients.find((item) => item.id === output.cliente_id);
   const clientByName = output.cliente_nome
     ? findClientByName(clients, output.cliente_nome)
     : undefined;
-  const resolvedClient = clientById ?? clientByName;
+  const resolvedClient = clientByName;
   const clientName = resolvedClient?.name ?? output.cliente_nome?.trim();
   const dueAt = normalizeDueAt(output.prazo_entrega_iso, now);
   const level = output.nivel_complexidade;

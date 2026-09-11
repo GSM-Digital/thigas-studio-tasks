@@ -7,7 +7,6 @@ import {
   calculateExecutionAdjustment,
   type ExecutionAdjustmentPercentage,
 } from "@/lib/domain/points";
-import { formatDuration } from "@/lib/domain/time";
 import { getServerEnv } from "@/lib/env";
 
 const completionOutputSchema = z.object({
@@ -97,18 +96,16 @@ export async function evaluateTaskCompletion(
   model = getServerEnv().GEMINI_CLASSIFICATION_MODEL,
 ): Promise<CompletionEvaluation> {
   const output = await client.generateStructured({
+    operation: "completion_evaluation",
     model,
     systemInstruction: JARVIS_COMPLETION_PROMPT,
     prompt: [
       `Tarefa: ${input.title}`,
       `Descrição original: ${input.description?.trim() || "não informada"}`,
-      `Pontos base: ${input.basePoints}`,
-      `SLA: ${formatDuration(input.estimatedDurationSeconds)}`,
-      `Tempo real: ${formatDuration(input.actualDurationSeconds)}`,
       `Relato de conclusão: ${input.completionSummary}`,
     ].join("\n"),
     responseJsonSchema: completionJsonSchema,
-    maxOutputTokens: 700,
+    maxOutputTokens: 600,
     timeoutMs: 12_000,
   });
   const parsed = completionOutputSchema.parse(output);

@@ -35,24 +35,26 @@ export type ClassifiedTask = TaskClassification & {
   clientName: string | null;
 };
 
-export const JARVIS_EVALUATION_GUIDE = `Você é Jarvis, um Gerente de Projetos de Tecnologia e Avaliador de Produtividade sênior. Sua função é calcular a pontuação final de tarefas de um Desenvolvedor Web em duas etapas: complexidade técnica e impacto (pontos base), seguida do fator de eficiência (comparação entre prazo estimado/SLA e tempo real gasto).
+export const JARVIS_COMPLEXITY_GUIDE = `Você é Jarvis, Gerente de Projetos de Tecnologia sênior. Classifique a complexidade técnica e o impacto de tarefas de Desenvolvimento Web com rigor.
 
-ETAPA 1 — PONTOS BASE
+PONTOS BASE
 - Nível 1 (1–4 pts): microtarefas, gestão de conteúdo e comunicação; baixo esforço cognitivo, sem risco estrutural, operação repetitiva ou alteração visual simples. Exemplos: alinhar domínio/hospedagem; analisar links; seguir ajustes do web designer; publicar artigo; criar Gmail; alterar tipografia, foto ou links; inserir assinaturas de e-mail.
 - Nível 2 (5–15 pts): setups, configurações e bugs moderados; ferramentas externas, formulários, scripts e correções com análise de código. Exemplos: implementar formulário; configurar Nuvemshop; corrigir carrossel; apontar LP na Lovable; configurar GA4 ou Leadster; apontar domínios.
 - Nível 3 (20–35 pts): implementações parciais, infraestrutura e migrações; alto risco operacional, DNS, banco de dados ou parte significativa de projeto. Exemplos: migrar landing page; desenvolver protótipo de LP; implementar seção/página de obrigado; migrar hospedagem; configurar WordPress em servidor novo.
 - Nível 4 (50–100 pts): projetos core e deep work; ativo completo do zero, alto esforço cognitivo e desenvolvimento integral. Exemplos: implementar página principal; todas as páginas; finalizar todas as páginas; LP HTML do zero; LP com formulário condicional.
 
-ETAPA 2 — EFICIÊNCIA
+Considere risco, dependências, ambiguidade e esforço. Escreva uma justificativa objetiva em português do Brasil, com no máximo duas frases.`;
+
+export const JARVIS_EFFICIENCY_GUIDE = `EFICIÊNCIA — calculada deterministicamente pela aplicação
 - Sem tempo real informado: use "+0" e mantenha a pontuação final igual aos pontos base.
 - Gasto abaixo de 50% do prazo: super eficiente. Use +40% se abaixo de 25%, +30% entre 25% e abaixo de 40%, ou +20% entre 40% e abaixo de 50%.
 - Gasto entre 50% e 100% do prazo, inclusive: dentro do esperado; use +0%.
 - Gasto acima de 100%: atraso. Use -20% até 125%, -35% acima de 125% e até 150%, ou -50% acima de 150%.
-- Arredonde o bônus ou a penalidade em pontos para o inteiro mais próximo e calcule pontuacao_final = pontos_base + bônus/penalidade.
+- Arredonde o ajuste em pontos para o inteiro mais próximo e calcule pontuacao_final = pontos_base + ajuste.`;
 
-Seja rigoroso, considere risco, dependências, ambiguidade e esforço. Escreva a justificativa em português do Brasil.`;
+export const JARVIS_EVALUATION_GUIDE = `${JARVIS_COMPLEXITY_GUIDE}\n\n${JARVIS_EFFICIENCY_GUIDE}`;
 
-export const JARVIS_SYSTEM_PROMPT = `${JARVIS_EVALUATION_GUIDE}
+export const JARVIS_SYSTEM_PROMPT = `${JARVIS_COMPLEXITY_GUIDE}
 
 ESTIMATIVA DE EXECUÇÃO
 - Retorne em prazo_estimado_segundos o tempo médio de trabalho focado de um Desenvolvedor Web sênior para executar e validar a tarefa.
@@ -67,7 +69,7 @@ IDENTIFICAÇÃO DO CLIENTE
 - Se houver um nome explícito que ainda não exista no catálogo, preserve esse nome para que a aplicação possa cadastrá-lo.
 - Se nenhum cliente puder ser identificado sem inventar, retorne null.
 
-Retorne APENAS um objeto JSON válido com exatamente: "nivel_complexidade", "pontos_base", "cliente_nome", "prazo_estimado_segundos", "bonus_ou_penalidade", "pontuacao_final" e "justificativa".`;
+Retorne APENAS o JSON estruturado solicitado. A aplicação calcula eficiência e pontuação final sem usar a IA.`;
 
 export type ClassifierClient = StructuredGenerationClient;
 
@@ -103,6 +105,40 @@ const jarvisOutputJsonSchema = {
   },
 } as const;
 
+const classifierAiOutputSchema = jarvisOutputSchema.pick({
+  nivel_complexidade: true,
+  pontos_base: true,
+  cliente_nome: true,
+  prazo_estimado_segundos: true,
+  justificativa: true,
+});
+
+const classifierAiOutputJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  propertyOrdering: [
+    "nivel_complexidade",
+    "pontos_base",
+    "cliente_nome",
+    "prazo_estimado_segundos",
+    "justificativa",
+  ],
+  required: [
+    "nivel_complexidade",
+    "pontos_base",
+    "cliente_nome",
+    "prazo_estimado_segundos",
+    "justificativa",
+  ],
+  properties: {
+    nivel_complexidade: jarvisOutputJsonSchema.properties.nivel_complexidade,
+    pontos_base: jarvisOutputJsonSchema.properties.pontos_base,
+    cliente_nome: jarvisOutputJsonSchema.properties.cliente_nome,
+    prazo_estimado_segundos: jarvisOutputJsonSchema.properties.prazo_estimado_segundos,
+    justificativa: jarvisOutputJsonSchema.properties.justificativa,
+  },
+} as const;
+
 export async function classifyTask(
   input: ClassificationInput,
   client: ClassifierClient = createGeminiStructuredClient(),
@@ -113,22 +149,23 @@ export async function classifyTask(
   const selectedClient = input.clients?.find((item) => item.id === input.selectedClientId) ?? null;
   const clientCatalog = input.clients?.map((item) => item.name) ?? [];
   const output = await client.generateStructured({
+    operation: "task_classification",
     model,
     systemInstruction: JARVIS_SYSTEM_PROMPT,
     prompt: [
       `Tarefa: ${input.title}`,
       `Descrição/observações: ${input.description?.trim() || "não informada"}`,
-      `Cliente selecionado: ${selectedClient?.name ?? "não selecionado — identifique pelo texto da tarefa"}`,
-      `Clientes ativos: ${JSON.stringify(clientCatalog)}`,
+      selectedClient
+        ? `Cliente já selecionado: ${selectedClient.name}`
+        : `Clientes ativos para identificação pelo texto: ${JSON.stringify(clientCatalog)}`,
       `Prazo Estimado: ${providedEstimate ? formatDuration(providedEstimate) : "não informado — estime o tempo médio"}`,
-      `Tempo Real Gasto: ${actualDuration && actualDuration > 0 ? formatDuration(actualDuration) : "não informado"}`,
     ].join("\n"),
-    responseJsonSchema: jarvisOutputJsonSchema,
-    maxOutputTokens: 700,
+    responseJsonSchema: classifierAiOutputJsonSchema,
+    maxOutputTokens: 360,
     timeoutMs: 12_000,
   });
 
-  const parsed = jarvisOutputSchema.parse(output);
+  const parsed = classifierAiOutputSchema.parse(output);
   if (!isValidPointsForLevel(parsed.nivel_complexidade, parsed.pontos_base)) {
     throw new Error("A pontuação base retornada não pertence à faixa do nível informado.");
   }

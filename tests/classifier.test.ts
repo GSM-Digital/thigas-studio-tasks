@@ -7,17 +7,16 @@ function clientWith(output: Record<string, unknown>): ClassifierClient {
 
 describe("avaliação do Jarvis", () => {
   it("aceita Structured Output e normaliza a eficiência no servidor", async () => {
+    const client = clientWith({
+      nivel_complexidade: 2,
+      pontos_base: 10,
+      cliente_nome: null,
+      prazo_estimado_segundos: 7200,
+      justificativa: "Configuração moderada concluída muito abaixo do prazo estimado.",
+    });
     const classification = await classifyTask(
       { title: "Configurar GA4", estimatedDurationSeconds: 7200, actualDurationSeconds: 1200 },
-      clientWith({
-        nivel_complexidade: 2,
-        pontos_base: 10,
-        cliente_nome: null,
-        prazo_estimado_segundos: 7200,
-        bonus_ou_penalidade: "+1",
-        pontuacao_final: 11,
-        justificativa: "Configuração moderada concluída muito abaixo do prazo estimado.",
-      }),
+      client,
       "gemini-3.6-flash",
     );
 
@@ -37,6 +36,14 @@ describe("avaliação do Jarvis", () => {
       bonus_ou_penalidade: "+4",
       pontuacao_final: 14,
     });
+    expect(client.generateStructured).toHaveBeenCalledWith(expect.objectContaining({
+      operation: "task_classification",
+      maxOutputTokens: 360,
+      prompt: expect.not.stringContaining("Tempo Real Gasto"),
+      responseJsonSchema: expect.objectContaining({
+        required: expect.not.arrayContaining(["bonus_ou_penalidade", "pontuacao_final"]),
+      }),
+    }));
   });
 
   it("mantém pontos base quando o tempo real ainda não existe", async () => {

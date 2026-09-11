@@ -462,7 +462,10 @@ function JarvisPanel({
         {
           method: "POST",
           body: JSON.stringify({
-            messages: nextMessages.slice(-12).map(({ role, content: text }) => ({ role, content: text })),
+            messages: nextMessages
+              .filter((message) => message.id !== "welcome" && !message.diagnostic)
+              .slice(-8)
+              .map(({ role, content: text }) => ({ role, content: text })),
           }),
         },
       );

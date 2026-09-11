@@ -17,7 +17,7 @@ const messageSchema = z.object({
 });
 
 const inputSchema = z.object({
-  messages: z.array(messageSchema).min(1).max(12).refine(
+  messages: z.array(messageSchema).min(1).max(8).refine(
     (messages) => messages.at(-1)?.role === "user",
     "A última mensagem deve ser do usuário.",
   ),
