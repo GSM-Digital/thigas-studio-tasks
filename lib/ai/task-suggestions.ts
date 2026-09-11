@@ -45,6 +45,7 @@ REGRAS DE CONTEÚDO
 - Escreva em português do Brasil, com palavras simples e frases diretas.
 - Evite siglas e palavras em inglês. Quando um termo técnico for inevitável, explique-o na primeira vez: por exemplo, "ambiente de testes (staging)". O termo "follow-up" pode ser usado.
 - Cada item deve descrever um resultado verificável, não uma atividade vaga.
+- Não junte dois resultados diferentes no mesmo item. Comunicação, cópia de segurança, testes e publicação devem ser itens separados.
 - Sugira ferramentas ou inteligências artificiais apenas quando ajudarem de verdade. Usar uma ferramenta, sozinho, nunca vale pontos; o que vale é o resultado revisado e validado.
 - Não repita o escopo básico da tarefa como se fosse trabalho adicional.
 
@@ -55,7 +56,8 @@ GAMIFICAÇÃO JUSTA
 - value: melhoria que gera valor além do escopo. Bônus de 2% a 5%, sem penalidade.
 - follow_up: confirmação ou comunicação que evita dúvida futura. Bônus de 1% a 2%, sem penalidade.
 - Exija evidência para itens essenciais, validações, testes, cópias de segurança e ações em produção.
-- Não crie penalidade para itens que não sejam essenciais.`;
+- Não crie penalidade para itens que não sejam essenciais.
+- Cópia de segurança antes de migração ou publicação é sempre um item separado da categoria essential.`;
 
 export interface GeneratedTaskSuggestion {
   title: string;
@@ -91,7 +93,8 @@ export async function generateTaskSuggestions(
   const parsed = outputSchema.parse(output);
   let remainingReward = 20;
   return parsed.sugestoes.map((suggestion, index) => {
-    const category = suggestion.categoria;
+    const mentionsBackup = /\b(backup|c[oó]pia de seguran[cç]a)\b/i.test(`${suggestion.titulo} ${suggestion.descricao}`);
+    const category = mentionsBackup ? "essential" : suggestion.categoria;
     const categoryMax = category === "value" ? 5 : category === "follow_up" ? 2 : 3;
     const remainingItems = parsed.sugestoes.length - index - 1;
     const rewardPercentage = Math.min(suggestion.percentual_bonus, categoryMax, remainingReward - remainingItems);
