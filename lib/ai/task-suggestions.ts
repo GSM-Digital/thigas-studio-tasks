@@ -69,6 +69,21 @@ export interface GeneratedTaskSuggestion {
   tools: string[];
 }
 
+function simplifyPortuguese(text: string): string {
+  return text
+    .replace(/\bantes do deploy\b/gi, "antes da publicação")
+    .replace(/\bdepois do deploy\b/gi, "depois da publicação")
+    .replace(/\bdo deploy\b/gi, "da publicação")
+    .replace(/\buma? prints?\b/gi, "uma captura de tela")
+    .replace(/\bprints?\b/gi, "captura de tela")
+    .replace(/\bbackups?\b/gi, "cópia de segurança")
+    .replace(/\bdeploy\b/gi, "publicação")
+    .replace(/\bbugs?\b/gi, "erros")
+    .replace(/\bsetup\b/gi, "configuração")
+    .replace(/\blazy loading\b/gi, "carregamento sob demanda")
+    .replace(/\bdeadline\b/gi, "prazo");
+}
+
 export async function generateTaskSuggestions(
   input: { title: string; description?: string | null; clientName: string; complexityLevel: number; estimatedDurationSeconds: number; dueAt: string | null },
   client: StructuredGenerationClient = createGeminiStructuredClient(),
@@ -100,8 +115,8 @@ export async function generateTaskSuggestions(
     const rewardPercentage = Math.min(suggestion.percentual_bonus, categoryMax, remainingReward - remainingItems);
     remainingReward -= rewardPercentage;
     return {
-      title: suggestion.titulo,
-      description: suggestion.descricao,
+      title: simplifyPortuguese(suggestion.titulo),
+      description: simplifyPortuguese(suggestion.descricao),
       category,
       rewardPercentage,
       omissionPenaltyPercentage: category === "essential"
