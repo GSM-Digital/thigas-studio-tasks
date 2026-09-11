@@ -74,6 +74,7 @@ function simplifyPortuguese(text: string): string {
     .replace(/\bantes do deploy\b/gi, "antes da publicação")
     .replace(/\bdepois do deploy\b/gi, "depois da publicação")
     .replace(/\bdo deploy\b/gi, "da publicação")
+    .replace(/\buma? prints? da tela\b/gi, "uma captura de tela")
     .replace(/\buma? prints?\b/gi, "uma captura de tela")
     .replace(/\bprints?\b/gi, "captura de tela")
     .replace(/\bbackups?\b/gi, "cópia de segurança")

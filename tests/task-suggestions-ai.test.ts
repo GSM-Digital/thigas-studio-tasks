@@ -6,7 +6,7 @@ describe("sugestões geradas pelo Jarvis", () => {
   it("normaliza bônus, penalidades e linguagem do contrato", async () => {
     const client: StructuredGenerationClient = {
       generateStructured: vi.fn().mockResolvedValue({ sugestoes: [
-        { titulo: "Fazer backup antes do deploy", descricao: "Salve todos os arquivos e anexe um print antes do deploy.", categoria: "follow_up", percentual_bonus: 5, percentual_penalidade_omissao: 2, exige_evidencia: false, ferramentas: ["Supabase", "Supabase"] },
+        { titulo: "Fazer backup antes do deploy", descricao: "Salve todos os arquivos e anexe um print da tela antes do deploy.", categoria: "follow_up", percentual_bonus: 5, percentual_penalidade_omissao: 2, exige_evidencia: false, ferramentas: ["Supabase", "Supabase"] },
         { titulo: "Validar os formulários", descricao: "Envie um teste e corrija os bugs antes do deadline.", categoria: "recommended", percentual_bonus: 4, percentual_penalidade_omissao: 12, exige_evidencia: true, ferramentas: [] },
         { titulo: "Fazer follow-up", descricao: "Confirme com o cliente se a entrega atende ao pedido inicial.", categoria: "follow_up", percentual_bonus: 4, percentual_penalidade_omissao: 9, exige_evidencia: false, ferramentas: [] },
       ] }),
