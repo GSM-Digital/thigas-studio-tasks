@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateChecklistScore } from "@/lib/domain/task-suggestions";
+import { calculateChecklistScore, findCompletedEssentialsMissingEvidence } from "@/lib/domain/task-suggestions";
 import type { TaskSuggestion } from "@/lib/types";
 
 function suggestion(overrides: Partial<TaskSuggestion>): TaskSuggestion {
@@ -36,5 +36,16 @@ describe("pontuação do checklist do Jarvis", () => {
     const item = suggestion({ status: "not_applicable", evidence: "A página ainda não será publicada." });
     expect(calculateChecklistScore([item], [{ position: 1, result: "not_applicable", rationale: "Não haverá publicação." }]).percentage).toBe(0);
     expect(calculateChecklistScore([item], [{ position: 1, result: "rejected", rationale: "A explicação não procede." }]).percentage).toBe(-10);
+  });
+
+  it("identifica item essencial marcado como feito sem comprovação escrita", () => {
+    const missing = suggestion({ status: "completed", evidence: "  " });
+    const optional = suggestion({ category: "recommended", status: "completed", evidence: null });
+    const pending = suggestion({ status: "pending", evidence: null });
+
+    expect(findCompletedEssentialsMissingEvidence([missing, optional, pending])).toEqual([missing]);
+    expect(findCompletedEssentialsMissingEvidence([
+      suggestion({ status: "completed", evidence: "Teste executado com sucesso." }),
+    ])).toHaveLength(0);
   });
 });

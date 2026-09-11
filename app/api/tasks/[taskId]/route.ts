@@ -7,6 +7,7 @@ import { getTaskView } from "@/lib/task-view";
 import { reevaluateCompletedTask } from "@/lib/ai/reevaluate-task";
 import { createAiErrorDiagnostic } from "@/lib/ai/error-diagnostics";
 import { logAiError, persistTaskEvaluationFailure } from "@/lib/ai/task-evaluation-error";
+import { findCompletedEssentialsMissingEvidence } from "@/lib/domain/task-suggestions";
 
 const updateSchema = z.object({
   completed: z.boolean().optional(),
@@ -59,6 +60,34 @@ export async function PATCH(request: Request, context: { params: Promise<{ taskI
     }
 
     if (input.completed) {
+      const { data: requiredEvidenceRows, error: requiredEvidenceError } = await supabase
+        .from("task_suggestions")
+        .select("id, title, category, status, evidence_required, evidence")
+        .eq("task_id", taskId)
+        .eq("agency_id", viewer.agencyId)
+        .eq("category", "essential")
+        .eq("status", "completed")
+        .eq("evidence_required", true);
+      if (requiredEvidenceError) {
+        throw new ApiError(500, "CHECKLIST_READ_FAILED", "Não foi possível validar as comprovações do checklist.");
+      }
+      const missingEvidence = findCompletedEssentialsMissingEvidence((requiredEvidenceRows ?? []).map((suggestion) => ({
+        id: suggestion.id,
+        title: suggestion.title,
+        category: suggestion.category,
+        status: suggestion.status,
+        evidenceRequired: suggestion.evidence_required,
+        evidence: suggestion.evidence,
+      })));
+      if (missingEvidence.length > 0) {
+        throw new ApiError(
+          422,
+          "REQUIRED_CHECKLIST_EVIDENCE_MISSING",
+          `Escreva a comprovação obrigatória de: ${missingEvidence.map((item) => item.title).join(", ")}.`,
+          { suggestionIds: missingEvidence.map((item) => item.id) },
+        );
+      }
+
       const { data: active } = await supabase
         .from("time_entries")
         .select("id")

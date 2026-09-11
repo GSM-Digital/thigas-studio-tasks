@@ -198,6 +198,8 @@ button { color: inherit; }
 .suggestion-proof-row { display: flex; align-items: center; gap: 7px; }
 .suggestion-proof-row input { min-width: 0; height: 34px; flex: 1; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; outline: 0; color: var(--text); background: var(--surface); font-size: var(--font-min); }
 .suggestion-proof-row input:focus { border-color: rgba(0,124,255,.55); box-shadow: 0 0 0 3px rgba(0,124,255,.08); }
+.suggestion-item.evidence-missing .suggestion-proof-row input { border-color: rgba(255,69,58,.8); box-shadow: 0 0 0 3px rgba(255,69,58,.1); }
+.suggestion-proof-error { display: block; margin-top: 6px; color: #ff453a; font-size: var(--font-min); line-height: 1.4; }
 .suggestion-proof-row input:read-only { color: var(--muted); }
 .suggestion-proof-row button { min-height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); background: var(--surface); font-size: var(--font-min); cursor: pointer; }
 .suggestion-verification { margin-top: 7px; color: var(--muted); font-size: var(--font-min); line-height: 1.4; }

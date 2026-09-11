@@ -1,6 +1,6 @@
 import { evaluateTaskCompletion } from "@/lib/ai/completion-evaluator";
 import { calculateEfficiencyScore, calculatePercentageAdjustment } from "@/lib/domain/points";
-import { calculateChecklistScore, mapTaskSuggestion } from "@/lib/domain/task-suggestions";
+import { calculateChecklistScore, mapTaskSuggestion, MIN_REQUIRED_EVIDENCE_LENGTH } from "@/lib/domain/task-suggestions";
 import { createClient } from "@/lib/supabase/server";
 
 export async function reevaluateCompletedTask(taskId: string, agencyId: string): Promise<void> {
@@ -36,14 +36,15 @@ export async function reevaluateCompletedTask(taskId: string, agencyId: string):
     task.estimated_duration_seconds,
     actualDurationSeconds,
   );
-  const completion = await evaluateTaskCompletion({
-    title: task.title,
-    description: task.description,
-    completionSummary: rawCompletionNotes,
-    basePoints: task.base_points,
-    estimatedDurationSeconds: task.estimated_duration_seconds,
-    actualDurationSeconds,
-    checklist: suggestions.map((suggestion) => ({
+  const checklistForEvaluation = suggestions
+    .filter((suggestion) => (
+      suggestion.category === "essential"
+      || (
+        suggestion.status === "completed"
+        && (!suggestion.evidenceRequired || (suggestion.evidence?.trim().length ?? 0) >= MIN_REQUIRED_EVIDENCE_LENGTH)
+      )
+    ))
+    .map((suggestion) => ({
       position: suggestion.position,
       title: suggestion.title,
       description: suggestion.description,
@@ -51,7 +52,16 @@ export async function reevaluateCompletedTask(taskId: string, agencyId: string):
       status: suggestion.status,
       evidence: suggestion.evidence,
       evidenceRequired: suggestion.evidenceRequired,
-    })),
+      scoringRule: suggestion.category === "essential" ? "essential" as const : "bonus_only" as const,
+    }));
+  const completion = await evaluateTaskCompletion({
+    title: task.title,
+    description: task.description,
+    completionSummary: rawCompletionNotes,
+    basePoints: task.base_points,
+    estimatedDurationSeconds: task.estimated_duration_seconds,
+    actualDurationSeconds,
+    checklist: checklistForEvaluation,
   });
   const checklistScore = calculateChecklistScore(suggestions, completion.checklistReviews);
   const narrativePercentage = checklistScore.percentage < 0 && completion.percentage > 0
@@ -64,7 +74,9 @@ export async function reevaluateCompletedTask(taskId: string, agencyId: string):
   const efficiencyPercentage = suppressEfficiencyBonus ? 0 : calculatedEfficiency.percentage;
   const finalPoints = Math.max(0, task.base_points + efficiencyAdjustment + executionAdjustment);
   const checklistRationale = suggestions.length > 0
-    ? `Checklist: +${checklistScore.earnedPercentage}% confirmado e -${checklistScore.penaltyPercentage}% por itens essenciais não confirmados.`
+    ? checklistScore.penaltyPercentage > 0
+      ? `Checklist: +${checklistScore.earnedPercentage}% confirmado e -${checklistScore.penaltyPercentage}% por itens essenciais não confirmados.`
+      : `Checklist: +${checklistScore.earnedPercentage}% confirmado e nenhum desconto por itens essenciais.`
     : "";
   const completionRationale = [completion.rationale, checklistRationale].filter(Boolean).join(" ");
   const { error: updateError } = await supabase
@@ -104,7 +116,9 @@ export async function reevaluateCompletedTask(taskId: string, agencyId: string):
     for (const suggestion of suggestions) {
       const review = reviewsByPosition.get(suggestion.position) ?? {
         result: "rejected" as const,
-        rationale: "O relato não confirmou que este item foi realizado.",
+        rationale: suggestion.category === "essential"
+          ? "O relato não confirmou que este item essencial foi realizado."
+          : "Item opcional não realizado ou não confirmado; sem impacto negativo na pontuação.",
       };
       const { error: reviewError } = await supabase
         .from("task_suggestions")

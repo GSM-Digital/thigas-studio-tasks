@@ -162,4 +162,59 @@ describe("reavaliação final da tarefa", () => {
     }));
     expect(suggestionUpdate.update).toHaveBeenCalledWith(expect.objectContaining({ verification_status: "rejected", verification_rationale: "A cópia de segurança não foi realizada." }));
   });
+
+  it("não envia item opcional pendente como motivo para penalidade narrativa", async () => {
+    const readQuery = { select: vi.fn(), eq: vi.fn(), single: vi.fn() };
+    readQuery.select.mockReturnValue(readQuery); readQuery.eq.mockReturnValue(readQuery);
+    readQuery.single.mockResolvedValue({ data: {
+      title: "Analisar landing pages reprovadas", description: "Identificar e corrigir a causa da reprovação.",
+      completion_summary: "Analisei as páginas, removi o código malicioso e validei o funcionamento final.",
+      base_points: 10, estimated_duration_seconds: 3600, tracked_seconds: 1800, manual_duration_seconds: null,
+      classification_metadata: {},
+    }, error: null });
+    const essential = {
+      id: "55555555-5555-4555-8555-555555555555", task_id: "44444444-4444-4444-8444-444444444444", position: 1,
+      title: "Fazer varredura de segurança", description: "Verificar códigos maliciosos.", category: "essential", reward_percentage: 3,
+      omission_penalty_percentage: 12, evidence_required: true, tools: [], status: "completed", evidence: "Varredura feita com o Codex.",
+      verification_status: "pending", verification_rationale: null,
+    };
+    const optional = {
+      ...essential,
+      id: "66666666-6666-4666-8666-666666666666",
+      position: 2,
+      title: "Validar links e redirecionamentos",
+      category: "recommended",
+      reward_percentage: 2,
+      omission_penalty_percentage: 0,
+      evidence_required: false,
+      status: "pending",
+      evidence: null,
+    };
+    const suggestionRead = { select: vi.fn(), eq: vi.fn(), order: vi.fn().mockResolvedValue({ data: [essential, optional], error: null }) };
+    suggestionRead.select.mockReturnValue(suggestionRead); suggestionRead.eq.mockReturnValue(suggestionRead);
+    const taskUpdate = { update: vi.fn(), eq: vi.fn() };
+    taskUpdate.update.mockReturnValue(taskUpdate); taskUpdate.eq.mockReturnValueOnce(taskUpdate).mockResolvedValueOnce({ error: null });
+    const suggestionUpdate = { update: vi.fn(), eq: vi.fn() };
+    suggestionUpdate.update.mockReturnValue(suggestionUpdate); suggestionUpdate.eq.mockReturnValue(suggestionUpdate);
+    mocks.from.mockReturnValueOnce(readQuery).mockReturnValueOnce(suggestionRead).mockReturnValueOnce(taskUpdate).mockReturnValue(suggestionUpdate);
+    mocks.evaluateTaskCompletion.mockResolvedValue({
+      summary: "Analisei as páginas, removi o código malicioso e validei o funcionamento final.", percentage: 0, adjustment: 0,
+      rationale: "A execução atendeu ao escopo principal sem fatos que justifiquem ajuste adicional.", model: "test-model",
+      checklistReviews: [{ position: 1, result: "verified", rationale: "A varredura foi informada e comprovada." }],
+    });
+
+    await reevaluateCompletedTask("44444444-4444-4444-8444-444444444444", "22222222-2222-4222-8222-222222222222");
+
+    expect(mocks.evaluateTaskCompletion).toHaveBeenCalledWith(expect.objectContaining({
+      checklist: [expect.objectContaining({ position: 1, category: "essential", scoringRule: "essential" })],
+    }));
+    expect(taskUpdate.update).toHaveBeenCalledWith(expect.objectContaining({
+      execution_adjustment: 0,
+      classification_metadata: expect.objectContaining({ checklist_penalty_percentage: 0 }),
+    }));
+    expect(suggestionUpdate.update).toHaveBeenCalledWith(expect.objectContaining({
+      verification_status: "rejected",
+      verification_rationale: "Item opcional não realizado ou não confirmado; sem impacto negativo na pontuação.",
+    }));
+  });
 });

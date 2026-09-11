@@ -37,6 +37,7 @@ describe("avaliação do relato de conclusão", () => {
       operation: "completion_evaluation",
       maxOutputTokens: 900,
       prompt: expect.not.stringMatching(/Pontos base:|SLA:|Tempo real:/),
+      systemInstruction: expect.stringMatching(/servem apenas para bônus[\s\S]*nunca representam falha/),
     }));
   });
 

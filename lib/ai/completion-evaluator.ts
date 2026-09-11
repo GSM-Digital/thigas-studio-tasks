@@ -88,6 +88,7 @@ REGRAS DE EQUIDADE
 - Não transforme velocidade em penalidade; eficiência de tempo é calculada separadamente pelo sistema.
 - Não invente falhas, autoria de terceiros ou problemas que não estejam explícitos no relato.
 - O relato não ganha pontos apenas por ser detalhado. Não premie atividades já previstas no escopo.
+- O ajuste geral de execução deve considerar somente o escopo original e fatos explícitos no relato. Nunca use um item opcional do checklist, feito ou não, para criar ou aumentar uma penalidade geral.
 - Escolha somente um dos percentuais permitidos e escreva a justificativa em português do Brasil, citando as evidências concretas do relato.
 
 AVALIAÇÃO DO CHECKLIST
@@ -95,8 +96,10 @@ AVALIAÇÃO DO CHECKLIST
 - Marque "verified" somente quando o relato ou a evidência confirmar o resultado.
 - Marque "rejected" quando o item estiver pendente, a evidência obrigatória estiver ausente ou a afirmação não for sustentada pelo relato.
 - Aceite "not_applicable" somente quando a explicação mostrar que o item realmente não se aplica; caso contrário, marque "rejected".
+- Itens "recommended", "value" e "follow_up" são opcionais e servem apenas para bônus. Se não forem realizados ou confirmados, valem 0%: nunca representam falha, negligência, entrega parcial ou requisito ignorado.
+- Somente itens "essential" podem gerar desconto, calculado separadamente pelo sistema.
 - Escreva justificativas curtas e fáceis de entender. Não use palavras técnicas sem explicá-las.
-- O sistema calcula os pontos do checklist; não inclua esses bônus no ajuste geral de execução.`;
+- O sistema calcula todos os bônus e descontos do checklist; não inclua nenhum deles no ajuste geral de execução.`;
 
 export interface CompletionEvaluationInput {
   title: string;
@@ -113,6 +116,7 @@ export interface CompletionEvaluationInput {
     status: string;
     evidence: string | null;
     evidenceRequired: boolean;
+    scoringRule?: "essential" | "bonus_only";
   }>;
 }
 

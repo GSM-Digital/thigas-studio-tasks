@@ -32,6 +32,17 @@ import { PATCH } from "@/app/api/tasks/[taskId]/route";
 
 const taskId = "44444444-4444-4444-8444-444444444444";
 
+function evidenceQuery(data: Array<Record<string, unknown>> = []) {
+  const query = { select: vi.fn(), eq: vi.fn() };
+  query.select.mockReturnValue(query);
+  let filters = 0;
+  query.eq.mockImplementation(() => {
+    filters += 1;
+    return filters === 5 ? Promise.resolve({ data, error: null }) : query;
+  });
+  return query;
+}
+
 describe("PATCH /api/tasks/[taskId]", () => {
   beforeEach(() => {
     mocks.from.mockReset();
@@ -146,7 +157,8 @@ describe("PATCH /api/tasks/[taskId]", () => {
     const taskQuery = { update: vi.fn(), eq: vi.fn() };
     taskQuery.update.mockReturnValue(taskQuery);
     taskQuery.eq.mockReturnValueOnce(taskQuery).mockResolvedValueOnce({ error: null });
-    mocks.from.mockImplementation((table: string) => table === "time_entries" ? timerQuery : taskQuery);
+    const checklistQuery = evidenceQuery();
+    mocks.from.mockImplementation((table: string) => table === "task_suggestions" ? checklistQuery : table === "time_entries" ? timerQuery : taskQuery);
     mocks.reevaluateCompletedTask.mockResolvedValue(undefined);
     mocks.getTaskView.mockResolvedValue({ id: taskId, status: "completed", completionSummary, executionAdjustment: 2 });
 
@@ -167,6 +179,34 @@ describe("PATCH /api/tasks/[taskId]", () => {
     await expect(response.json()).resolves.toMatchObject({ task: { completionSummary, executionAdjustment: 2 } });
   });
 
+  it("recusa a conclusão de item essencial feito sem comprovação", async () => {
+    const checklistQuery = evidenceQuery([{
+      id: "55555555-5555-4555-8555-555555555555",
+      title: "Executar varredura de segurança",
+      category: "essential",
+      status: "completed",
+      evidence_required: true,
+      evidence: null,
+    }]);
+    mocks.from.mockImplementation((table: string) => table === "task_suggestions" ? checklistQuery : (() => { throw new Error(`Consulta inesperada: ${table}`); })());
+
+    const response = await PATCH(new Request(`http://localhost/api/tasks/${taskId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ completed: true, completionSummary: "Executei toda a tarefa e revisei o resultado final." }),
+    }), { params: Promise.resolve({ taskId }) });
+
+    expect(response.status).toBe(422);
+    await expect(response.json()).resolves.toMatchObject({
+      error: {
+        code: "REQUIRED_CHECKLIST_EVIDENCE_MISSING",
+        message: expect.stringContaining("Executar varredura de segurança"),
+        details: { suggestionIds: ["55555555-5555-4555-8555-555555555555"] },
+      },
+    });
+    expect(mocks.reevaluateCompletedTask).not.toHaveBeenCalled();
+  });
+
   it("preserva a conclusão e registra o diagnóstico quando a IA falha", async () => {
     const completionSummary = "Concluí a implementação e validei o resultado no ambiente final.";
     const timerQuery = { select: vi.fn(), eq: vi.fn(), is: vi.fn(), maybeSingle: vi.fn() };
@@ -177,7 +217,8 @@ describe("PATCH /api/tasks/[taskId]", () => {
     const taskQuery = { update: vi.fn(), eq: vi.fn() };
     taskQuery.update.mockReturnValue(taskQuery);
     taskQuery.eq.mockReturnValueOnce(taskQuery).mockResolvedValueOnce({ error: null });
-    mocks.from.mockImplementation((table: string) => table === "time_entries" ? timerQuery : taskQuery);
+    const checklistQuery = evidenceQuery();
+    mocks.from.mockImplementation((table: string) => table === "task_suggestions" ? checklistQuery : table === "time_entries" ? timerQuery : taskQuery);
     mocks.reevaluateCompletedTask.mockRejectedValue(Object.assign(
       new Error('{"error":{"code":429,"status":"RESOURCE_EXHAUSTED","message":"Daily quota exceeded"}}'),
       { status: 429 },

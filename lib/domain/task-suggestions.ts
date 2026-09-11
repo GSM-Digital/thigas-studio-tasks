@@ -19,6 +19,28 @@ export interface ChecklistScore {
   penaltyPercentage: number;
 }
 
+export interface ChecklistEvidenceItem {
+  id: string;
+  title: string;
+  category: TaskSuggestion["category"];
+  status: TaskSuggestion["status"];
+  evidenceRequired: boolean;
+  evidence: string | null;
+}
+
+export const MIN_REQUIRED_EVIDENCE_LENGTH = 5;
+
+export function findCompletedEssentialsMissingEvidence(
+  suggestions: ChecklistEvidenceItem[],
+): ChecklistEvidenceItem[] {
+  return suggestions.filter((suggestion) => (
+    suggestion.category === "essential"
+    && suggestion.status === "completed"
+    && suggestion.evidenceRequired
+    && (suggestion.evidence?.trim().length ?? 0) < MIN_REQUIRED_EVIDENCE_LENGTH
+  ));
+}
+
 export function calculateChecklistScore(
   suggestions: TaskSuggestion[],
   reviews: SuggestionReview[],

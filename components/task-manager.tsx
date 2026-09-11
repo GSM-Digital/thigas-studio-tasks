@@ -43,7 +43,11 @@ import {
 } from "@/lib/domain/deadline";
 import { calculateAmountCents, calculateEfficiencyScore, formatCurrency } from "@/lib/domain/points";
 import { groupTasksByDeadline } from "@/lib/domain/task-groups";
-import { TASK_SUGGESTION_CATEGORY_LABELS } from "@/lib/domain/task-suggestions";
+import {
+  findCompletedEssentialsMissingEvidence,
+  MIN_REQUIRED_EVIDENCE_LENGTH,
+  TASK_SUGGESTION_CATEGORY_LABELS,
+} from "@/lib/domain/task-suggestions";
 import { effectiveDuration, formatDuration, parseDuration } from "@/lib/domain/time";
 import { generateBillingReport, reportToCsv } from "@/lib/reports/generate";
 import { useSpeechDictation } from "@/lib/browser/use-speech-dictation";
@@ -744,6 +748,7 @@ function TaskSuggestionsChecklist({
   compact = false,
   savingId,
   evidenceDrafts,
+  invalidEvidenceIds = [],
   onEvidenceChange,
   onUpdate,
 }: {
@@ -752,6 +757,7 @@ function TaskSuggestionsChecklist({
   compact?: boolean;
   savingId: string | null;
   evidenceDrafts: Record<string, string>;
+  invalidEvidenceIds?: string[];
   onEvidenceChange: (id: string, value: string) => void;
   onUpdate: (suggestion: TaskSuggestion, status: TaskSuggestion["status"], evidence: string | null) => void;
 }) {
@@ -761,8 +767,10 @@ function TaskSuggestionsChecklist({
         const evidence = evidenceDrafts[suggestion.id] ?? suggestion.evidence ?? "";
         const checked = suggestion.status === "completed";
         const unavailable = suggestion.status === "not_applicable";
+        const evidenceInvalid = invalidEvidenceIds.includes(suggestion.id);
+        const evidenceInputId = `${compact ? "completion-" : ""}suggestion-evidence-${suggestion.id}`;
         return (
-          <div className={`suggestion-item ${checked ? "completed" : ""} ${unavailable ? "not-applicable" : ""}`} key={suggestion.id}>
+          <div className={`suggestion-item ${checked ? "completed" : ""} ${unavailable ? "not-applicable" : ""} ${evidenceInvalid ? "evidence-missing" : ""}`} key={suggestion.id}>
             <button
               type="button"
               className="suggestion-check"
@@ -782,7 +790,10 @@ function TaskSuggestionsChecklist({
               {suggestion.tools.length > 0 && <small>Ferramentas sugeridas: {suggestion.tools.join(", ")}</small>}
               <div className="suggestion-proof-row">
                 <input
+                  id={evidenceInputId}
                   aria-label={`Comprovação de ${suggestion.title}`}
+                  aria-invalid={evidenceInvalid}
+                  aria-describedby={evidenceInvalid ? `${evidenceInputId}-error` : undefined}
                   value={evidence}
                   readOnly={done}
                   maxLength={1000}
@@ -798,6 +809,11 @@ function TaskSuggestionsChecklist({
                   </>
                 )}
               </div>
+              {evidenceInvalid && (
+                <small className="suggestion-proof-error" id={`${evidenceInputId}-error`} role="alert">
+                  Escreva o que foi feito, o teste, o link ou o resultado antes de concluir a tarefa.
+                </small>
+              )}
               {done && suggestion.verificationStatus !== "pending" && (
                 <div className={`suggestion-verification ${suggestion.verificationStatus}`}>
                   {suggestion.verificationStatus === "verified" ? "Confirmado pelo Jarvis" : suggestion.verificationStatus === "not_applicable" ? "Dispensa aceita" : "Não confirmado"}
@@ -834,6 +850,7 @@ function TaskRow({ task, clients, settings, demoMode, onMutate, onRemove }: { ta
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
   const [suggestionsNotice, setSuggestionsNotice] = useState<string | null>(null);
+  const [invalidEvidenceIds, setInvalidEvidenceIds] = useState<string[]>([]);
   const [savingSuggestionId, setSavingSuggestionId] = useState<string | null>(null);
   const [evidenceDrafts, setEvidenceDrafts] = useState<Record<string, string>>({});
   const completionSpeech = useSpeechDictation({
@@ -915,6 +932,9 @@ function TaskRow({ task, clients, settings, demoMode, onMutate, onRemove }: { ta
           })).suggestion;
       setSuggestions((current) => current?.map((item) => item.id === updated.id ? updated : item) ?? [updated]);
       setEvidenceDrafts((current) => ({ ...current, [updated.id]: updated.evidence ?? "" }));
+      if ((updated.evidence?.trim().length ?? 0) >= MIN_REQUIRED_EVIDENCE_LENGTH || updated.status !== "completed") {
+        setInvalidEvidenceIds((current) => current.filter((id) => id !== updated.id));
+      }
       if (status === "not_applicable") {
         setSuggestionsNotice("Entendido. O Jarvis vai considerar este motivo em demandas semelhantes.");
       }
@@ -922,6 +942,14 @@ function TaskRow({ task, clients, settings, demoMode, onMutate, onRemove }: { ta
       setSuggestionsError(error instanceof Error ? error.message : "Não foi possível atualizar o checklist.");
     } finally {
       setSavingSuggestionId(null);
+    }
+  }
+
+  function changeSuggestionEvidence(id: string, value: string) {
+    setEvidenceDrafts((current) => ({ ...current, [id]: value }));
+    if (value.trim().length >= MIN_REQUIRED_EVIDENCE_LENGTH) {
+      setInvalidEvidenceIds((current) => current.filter((suggestionId) => suggestionId !== id));
+      setSuggestionsError(null);
     }
   }
 
@@ -953,8 +981,48 @@ function TaskRow({ task, clients, settings, demoMode, onMutate, onRemove }: { ta
   async function completeTask(event: React.FormEvent) {
     event.preventDefault();
     const completionSummary = completionInput.trim();
-    if (completionSummary.length < 10 || completing || loadingSuggestions || completionSpeech.listening) return;
+    if (completionSummary.length < 10 || completing || loadingSuggestions || completionSpeech.listening || savingSuggestionId) return;
+    const currentSuggestions = suggestions ?? [];
+    const suggestionsWithDrafts = currentSuggestions.map((suggestion) => ({
+      ...suggestion,
+      evidence: evidenceDrafts[suggestion.id]?.trim() || null,
+    }));
+    const missingEvidence = findCompletedEssentialsMissingEvidence(suggestionsWithDrafts);
+    if (missingEvidence.length > 0) {
+      const missingIds = missingEvidence.map((suggestion) => suggestion.id);
+      setInvalidEvidenceIds(missingIds);
+      setSuggestionsNotice(null);
+      setSuggestionsError(
+        missingEvidence.length === 1
+          ? `Para concluir, preencha a comprovação obrigatória de “${missingEvidence[0]!.title}”.`
+          : `Para concluir, preencha as ${missingEvidence.length} comprovações obrigatórias destacadas.`,
+      );
+      window.requestAnimationFrame(() => document.getElementById(`completion-suggestion-evidence-${missingIds[0]}`)?.focus());
+      return;
+    }
     setCompleting(true);
+    setSuggestionsError(null);
+    let persistedSuggestions = suggestionsWithDrafts;
+    if (!demoMode) {
+      try {
+        const changedSuggestions = suggestionsWithDrafts.filter((suggestion) => (
+          (suggestion.evidence ?? "") !== (currentSuggestions.find((item) => item.id === suggestion.id)?.evidence ?? "")
+        ));
+        const savedSuggestions = await Promise.all(changedSuggestions.map(async (suggestion) => (
+          await requestJson<{ suggestion: TaskSuggestion }>(`/api/tasks/${task.id}/suggestions/${suggestion.id}`, {
+            method: "PATCH",
+            body: JSON.stringify({ status: suggestion.status, evidence: suggestion.evidence }),
+          })
+        ).suggestion));
+        const savedById = new Map(savedSuggestions.map((suggestion) => [suggestion.id, suggestion]));
+        persistedSuggestions = suggestionsWithDrafts.map((suggestion) => savedById.get(suggestion.id) ?? suggestion);
+      } catch (error) {
+        setSuggestionsError(error instanceof Error ? error.message : "Não foi possível salvar as comprovações do checklist.");
+        setCompleting(false);
+        return;
+      }
+    }
+    setSuggestions(persistedSuggestions);
     const completedAt = new Date().toISOString();
     const completed = await onMutate(
       task.id,
@@ -1223,7 +1291,8 @@ function TaskRow({ task, clients, settings, demoMode, onMutate, onRemove }: { ta
                 done={done}
                 savingId={savingSuggestionId}
                 evidenceDrafts={evidenceDrafts}
-                onEvidenceChange={(id, value) => setEvidenceDrafts((current) => ({ ...current, [id]: value }))}
+                invalidEvidenceIds={invalidEvidenceIds}
+                onEvidenceChange={changeSuggestionEvidence}
                 onUpdate={(suggestion, status, evidence) => void updateSuggestion(suggestion, status, evidence)}
               />
             )}
@@ -1257,7 +1326,8 @@ function TaskRow({ task, clients, settings, demoMode, onMutate, onRemove }: { ta
                   compact
                   savingId={savingSuggestionId}
                   evidenceDrafts={evidenceDrafts}
-                  onEvidenceChange={(id, value) => setEvidenceDrafts((current) => ({ ...current, [id]: value }))}
+                  invalidEvidenceIds={invalidEvidenceIds}
+                  onEvidenceChange={changeSuggestionEvidence}
                   onUpdate={(suggestion, status, evidence) => void updateSuggestion(suggestion, status, evidence)}
                 />
               </div>
@@ -1297,7 +1367,7 @@ function TaskRow({ task, clients, settings, demoMode, onMutate, onRemove }: { ta
               <div className="completion-hint"><Sparkles /><span>O Jarvis organizará seu relato, conferirá o checklist e avaliará autoria, qualidade, resultado e correções necessárias. Usar inteligência artificial ou automação não reduz pontos quando você conduz, revisa e valida a entrega.</span></div>
               <div className="completion-actions">
                 <button type="button" onClick={closeCompletion} disabled={completing}>Cancelar</button>
-                <button type="submit" disabled={completing || loadingSuggestions || completionSpeech.listening || completionInput.trim().length < 10}>{completing || loadingSuggestions ? <LoaderCircle className="spin" /> : <Sparkles />} {completing ? "Jarvis está resumindo..." : loadingSuggestions ? "Preparando checklist..." : "Resumir e concluir"}</button>
+                <button type="submit" disabled={completing || loadingSuggestions || Boolean(savingSuggestionId) || completionSpeech.listening || completionInput.trim().length < 10}>{completing || loadingSuggestions ? <LoaderCircle className="spin" /> : <Sparkles />} {completing ? "Jarvis está resumindo..." : loadingSuggestions ? "Preparando checklist..." : "Resumir e concluir"}</button>
               </div>
             </form>
           </section>

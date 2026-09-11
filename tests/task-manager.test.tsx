@@ -412,6 +412,54 @@ describe("fechamento assistido pelo Jarvis", () => {
     expect(screen.getByRole("button", { name: "Resumir e concluir" })).toBeEnabled();
   });
 
+  it("impede a conclusão quando um item essencial feito está sem comprovação", async () => {
+    const task: TaskView = {
+      id: "task-without-proof",
+      title: "Publicar landing page com segurança",
+      description: "Validar a página antes de publicar.",
+      completionSummary: null,
+      completionRationale: null,
+      clientId: demoClients[0]!.id,
+      clientName: demoClients[0]!.name,
+      clientColor: demoClients[0]!.color,
+      status: "open",
+      complexityLevel: 3,
+      basePoints: 25,
+      efficiencyAdjustment: 0,
+      executionAdjustment: 0,
+      points: 25,
+      estimatedDurationSeconds: 10_800,
+      dueAt: "2030-04-20T18:00:00.000Z",
+      completedAt: null,
+      activeTimerStartedAt: null,
+      trackedSeconds: 7_200,
+      manualDurationSeconds: null,
+      classificationStatus: "classified",
+    };
+
+    render(<TaskManager initialTasks={[task]} clients={demoClients} viewer={demoViewer} initialSettings={demoSettings} demoMode />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Concluir tarefa" }));
+    expect(await screen.findByText("Validar antes de publicar")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Marcar Validar antes de publicar como realizado" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Desmarcar Validar antes de publicar" })).toBeVisible());
+    fireEvent.change(screen.getByLabelText("Conte livremente como foi a entrega"), {
+      target: { value: "Concluí a publicação e revisei o resultado no ambiente final." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Resumir e concluir" }));
+
+    expect(screen.getByRole("dialog", { name: "Como foi a execução?" })).toBeVisible();
+    expect(screen.getByText(/preencha a comprovação obrigatória de “Validar antes de publicar”/)).toBeVisible();
+    const proof = screen.getByLabelText("Comprovação de Validar antes de publicar");
+    expect(proof).toHaveAttribute("aria-invalid", "true");
+    await waitFor(() => expect(proof).toHaveFocus());
+
+    fireEvent.change(proof, { target: { value: "Testado no computador e no celular antes da publicação." } });
+    expect(proof).toHaveAttribute("aria-invalid", "false");
+    fireEvent.click(screen.getByRole("button", { name: "Resumir e concluir" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Como foi a execução?" })).not.toBeInTheDocument());
+  });
+
   it("permite reavaliar uma conclusão quando a avaliação anterior falhou", async () => {
     const failedTask: TaskView = {
       id: "failed-evaluation",
