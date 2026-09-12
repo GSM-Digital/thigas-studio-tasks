@@ -4,6 +4,7 @@ import {
   deadlineInputToIso,
   isFutureDeadline,
   toDateTimeLocalValue,
+  weekendDayAtTimeZone,
 } from "@/lib/domain/deadline";
 
 describe("prazos de tarefas", () => {
@@ -28,5 +29,18 @@ describe("prazos de tarefas", () => {
     const deadline = createDefaultDeadline(new Date(2030, 0, 2, 9, 15, 0));
 
     expect(deadline).toBe("2030-01-03T18:00");
+  });
+
+  it("identifica sábado e domingo no fuso da agência", () => {
+    expect(weekendDayAtTimeZone("2026-09-12T15:00:00.000Z")).toBe("saturday");
+    expect(weekendDayAtTimeZone("2026-09-13T15:00:00.000Z")).toBe("sunday");
+    expect(weekendDayAtTimeZone("2026-09-14T15:00:00.000Z")).toBeNull();
+  });
+
+  it("respeita a virada de data de São Paulo", () => {
+    const saturdayInUtcButFridayInSaoPaulo = "2026-09-12T01:30:00.000Z";
+
+    expect(weekendDayAtTimeZone(saturdayInUtcButFridayInSaoPaulo, "UTC")).toBe("saturday");
+    expect(weekendDayAtTimeZone(saturdayInUtcButFridayInSaoPaulo, "America/Sao_Paulo")).toBeNull();
   });
 });

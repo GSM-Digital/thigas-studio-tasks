@@ -58,6 +58,19 @@ export function dateKeyAtTimeZone(
   return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
+export function weekendDayAtTimeZone(
+  value: Date | string,
+  timeZone = "America/Sao_Paulo",
+): "saturday" | "sunday" | null {
+  const weekday = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    weekday: "short",
+  }).format(new Date(value));
+  if (weekday === "Sat") return "saturday";
+  if (weekday === "Sun") return "sunday";
+  return null;
+}
+
 export function formatDeadline(
   value: string,
   timeZone = "America/Sao_Paulo",

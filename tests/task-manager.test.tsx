@@ -36,10 +36,38 @@ beforeAll(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.useRealTimers();
+  window.sessionStorage.clear();
 });
 
 afterAll(() => {
   delete window.SpeechRecognition;
+});
+
+describe("modo descanso no fim de semana", () => {
+  it("recolhe as demandas e permite continuar em caso de necessidade", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-12T15:00:00.000Z"));
+
+    render(
+      <TaskManager
+        initialTasks={[]}
+        clients={demoClients}
+        viewer={demoViewer}
+        initialSettings={demoSettings}
+        demoMode
+      />,
+    );
+
+    expect(screen.getByRole("dialog", { name: "Vai descansar." })).toBeVisible();
+    expect(screen.getByText(/reabastecer as energias/)).toBeVisible();
+    expect(screen.getByText(/0 demandas estão guardadas/)).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Ver demandas mesmo assim" }));
+
+    expect(screen.queryByRole("dialog", { name: "Vai descansar." })).not.toBeInTheDocument();
+    expect(window.sessionStorage.getItem("jarvis-weekend-rest-dismissed")).toBe("true");
+  });
 });
 
 describe("formulário de nova demanda", () => {

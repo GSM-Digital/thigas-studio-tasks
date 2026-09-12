@@ -112,6 +112,19 @@ button { color: inherit; }
 .day-score div { display: flex; flex-direction: column; }
 .day-score strong { font-size: 15px; line-height: 1; }
 .day-score span { color: var(--muted); font-size: max(var(--font-min), 9px); margin-top: 3px; }
+.weekend-rest-backdrop { position: fixed; inset: 0; z-index: 65; display: grid; place-items: center; padding: 24px; background: color-mix(in srgb, var(--bg) 68%, transparent); backdrop-filter: blur(18px) saturate(90%); animation: completion-fade-in 220ms ease-out; }
+.weekend-rest-dialog { position: relative; width: min(620px, 100%); overflow: hidden; padding: clamp(38px, 7vw, 68px); text-align: center; border: 1px solid var(--glass-border); border-radius: 28px; background: radial-gradient(circle at 50% 0%, rgba(52,199,89,.12), transparent 42%), var(--panel); box-shadow: 0 30px 100px rgba(0,0,0,.28), inset 0 1px rgba(255,255,255,.05); }
+.weekend-rest-dialog::before, .weekend-rest-dialog::after { content: ""; position: absolute; border-radius: 50%; pointer-events: none; filter: blur(1px); }
+.weekend-rest-dialog::before { width: 190px; height: 190px; right: -95px; top: -110px; background: rgba(52,199,89,.08); }
+.weekend-rest-dialog::after { width: 150px; height: 150px; left: -90px; bottom: -95px; background: rgba(0,122,255,.06); }
+.weekend-rest-icon { width: 56px; height: 56px; display: grid; place-items: center; margin: 0 auto 20px; color: #30d158; border: 1px solid rgba(48,209,88,.24); border-radius: 19px; background: rgba(48,209,88,.1); box-shadow: 0 14px 36px rgba(48,209,88,.1); }
+.weekend-rest-icon svg { width: 25px; height: 25px; }
+.weekend-rest-eyebrow { margin: 0 0 12px; color: #30d158; font-size: var(--font-min); font-weight: 750; letter-spacing: .16em; }
+.weekend-rest-dialog h2 { margin: 0; color: var(--text); font-size: clamp(38px, 7vw, 68px); font-weight: 620; letter-spacing: -.06em; line-height: .95; text-wrap: balance; }
+.weekend-rest-dialog > p:not(.weekend-rest-eyebrow) { max-width: 470px; margin: 24px auto 0; color: var(--muted); font-size: clamp(16px, 2.2vw, 20px); line-height: 1.55; text-wrap: balance; }
+.weekend-rest-dialog small { display: block; margin: 23px 0 0; color: var(--muted-2); font-size: var(--font-min); }
+.weekend-rest-dialog button { min-height: 44px; margin-top: 28px; padding: 0 19px; color: var(--text); border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); font-size: var(--font-min); font-weight: 650; cursor: pointer; transition: color .2s, border-color .2s, background .2s, transform .2s; }
+.weekend-rest-dialog button:hover { color: #30d158; border-color: rgba(48,209,88,.35); background: rgba(48,209,88,.08); transform: translateY(-1px); }
 .quick-add { min-height: 72px; padding: 9px 10px 9px 18px; display: grid; grid-template-columns: auto minmax(150px, 1fr) 145px 82px 177px auto; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); }
 .add-circle { width: 25px; height: 25px; display: grid; place-items: center; border: 1.5px solid var(--blue); border-radius: 50%; color: var(--blue); }
 .add-circle svg { width: 15px; }
@@ -570,6 +583,11 @@ button { color: inherit; }
 }
 
 @media (max-width: 520px) {
+  .weekend-rest-backdrop { align-items: end; padding: 10px; }
+  .weekend-rest-dialog { padding: 40px 22px 28px; border-radius: 24px; }
+  .weekend-rest-dialog h2 { font-size: 44px; }
+  .weekend-rest-dialog > p:not(.weekend-rest-eyebrow) { margin-top: 20px; font-size: 16px; }
+  .weekend-rest-dialog button { width: 100%; }
   .completion-modal-backdrop { align-items: end; padding: 10px; }
   .completion-modal { padding: 20px 17px 17px; border-radius: 20px; }
   .completion-modal-head { grid-template-columns: 38px minmax(0, 1fr) 30px; gap: 10px; }

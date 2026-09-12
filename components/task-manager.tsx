@@ -10,6 +10,7 @@ import {
   Copy,
   Download,
   LayoutDashboard,
+  Leaf,
   ListTodo,
   LoaderCircle,
   Mic,
@@ -40,6 +41,7 @@ import {
   formatDeadline,
   isFutureDeadline,
   toDateTimeLocalValue,
+  weekendDayAtTimeZone,
 } from "@/lib/domain/deadline";
 import { calculateAmountCents, calculateEfficiencyScore, formatCurrency } from "@/lib/domain/points";
 import { groupTasksByDeadline } from "@/lib/domain/task-groups";
@@ -601,6 +603,8 @@ function DeveloperView({
   const [currentDate] = useState(() => new Date());
   const [adding, setAdding] = useState(false);
   const timezone = settings.timezone ?? "America/Sao_Paulo";
+  const weekendDay = weekendDayAtTimeZone(currentDate, timezone);
+  const [weekendRestOpen, setWeekendRestOpen] = useState(() => weekendDay !== null);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -609,6 +613,15 @@ function DeveloperView({
     }, 0);
     return () => window.clearTimeout(timeout);
   }, []);
+  useEffect(() => {
+    if (!weekendDay) return;
+    const timeout = window.setTimeout(() => {
+      if (window.sessionStorage.getItem("jarvis-weekend-rest-dismissed") === "true") {
+        setWeekendRestOpen(false);
+      }
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [weekendDay]);
   const hasInvalidEstimate = estimatedHours.trim() !== "" && (
     !Number.isFinite(Number(estimatedHours)) || Number(estimatedHours) <= 0
   );
@@ -621,6 +634,11 @@ function DeveloperView({
   const effectiveClientId = clients.some((client) => client.id === clientId)
     ? clientId
     : demoMode ? clients[0]?.id ?? "" : "";
+
+  function showWeekendWork() {
+    window.sessionStorage.setItem("jarvis-weekend-rest-dismissed", "true");
+    setWeekendRestOpen(false);
+  }
 
   async function addTask(event: React.FormEvent) {
     event.preventDefault();
@@ -688,6 +706,36 @@ function DeveloperView({
 
   return (
     <div className="content-wrap">
+      {weekendDay && weekendRestOpen && (
+        <div className="weekend-rest-backdrop">
+          <section
+            className="weekend-rest-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="weekend-rest-title"
+            aria-describedby="weekend-rest-description"
+          >
+            <div className="weekend-rest-icon" aria-hidden="true">
+              <Leaf />
+            </div>
+            <p className="weekend-rest-eyebrow">
+              MODO DESCANSO · {weekendDay === "saturday" ? "SÁBADO" : "DOMINGO"}
+            </p>
+            <h2 id="weekend-rest-title">Vai descansar.</h2>
+            <p id="weekend-rest-description">
+              Aproveite o seu fim de semana para reabastecer as energias, sair um pouco das telas e
+              entrar em contato com a natureza. As demandas podem esperar.
+            </p>
+            <small>
+              {openTasks.length} {openTasks.length === 1 ? "demanda está guardada" : "demandas estão guardadas"}
+              {" "}para quando você voltar.
+            </small>
+            <button type="button" onClick={showWeekendWork} autoFocus>
+              Ver demandas mesmo assim
+            </button>
+          </section>
+        </div>
+      )}
       <div className="page-heading">
         <div><p className="eyebrow">MEU TRABALHO</p><h1>Hoje</h1><p>{currentDate ? new Intl.DateTimeFormat("pt-BR", { timeZone: timezone, weekday: "long", day: "numeric", month: "long" }).format(currentDate) : "\u00A0"}</p></div>
         <div className="day-score"><Check /><div><strong>{todayCompleted}</strong><span>concluídas hoje</span></div></div>
