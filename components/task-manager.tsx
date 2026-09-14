@@ -829,7 +829,7 @@ function TaskSuggestionsChecklist({
             >{savingId === suggestion.id ? <LoaderCircle className="spin" /> : checked ? <Check /> : null}</button>
             <div className="suggestion-copy">
               <div className="suggestion-title-row">
-                <strong>{suggestion.title}</strong>
+                <strong>{unavailable ? <del>{suggestion.title}</del> : suggestion.title}</strong>
                 <span className={`suggestion-category ${suggestion.category}`}>{TASK_SUGGESTION_CATEGORY_LABELS[suggestion.category]}</span>
                 <b>+{suggestion.rewardPercentage}%</b>
                 {suggestion.omissionPenaltyPercentage > 0 && <em>Se não fizer: −{suggestion.omissionPenaltyPercentage}%</em>}

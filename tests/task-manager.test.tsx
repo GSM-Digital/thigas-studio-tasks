@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { TaskManager } from "@/components/task-manager";
 import { demoClients, demoSettings, demoViewer } from "@/lib/demo-data";
@@ -654,7 +654,7 @@ describe("detalhamento da pontuação na visão Agência", () => {
 });
 
 describe("checklist de sugestões do Jarvis", () => {
-  it("abre a aba, mostra linguagem simples e permite marcar uma sugestão", async () => {
+  it("abre a aba e distingue visualmente uma sugestão que não se aplica", async () => {
     const task: TaskView = {
       id: "suggestion-task", title: "Migrar landing page", description: "Migrar e publicar.",
       completionSummary: null, completionRationale: null, clientId: demoClients[0]!.id,
@@ -673,5 +673,13 @@ describe("checklist de sugestões do Jarvis", () => {
     fireEvent.click(screen.getByRole("button", { name: "Marcar Validar antes de publicar como realizado" }));
     expect(screen.getByRole("button", { name: "Desmarcar Validar antes de publicar" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText(/1\/3 realizados/)).toBeVisible();
+
+    const suggestionItem = screen.getByText("Validar antes de publicar").closest(".suggestion-item");
+    expect(suggestionItem).not.toBeNull();
+    fireEvent.click(within(suggestionItem as HTMLElement).getByRole("button", { name: "Não se aplica" }));
+
+    await waitFor(() => expect(suggestionItem).toHaveClass("not-applicable"));
+    expect(within(suggestionItem as HTMLElement).getByText("Validar antes de publicar").tagName).toBe("DEL");
+    expect(within(suggestionItem as HTMLElement).getByRole("button", { name: "Reativar" })).toBeVisible();
   });
 });

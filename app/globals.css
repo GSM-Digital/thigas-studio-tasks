@@ -190,9 +190,14 @@ button { color: inherit; }
 .suggestions-error { margin: 6px 5px 10px; padding: 9px 11px; border-radius: 8px; color: #ff9f0a; background: rgba(255,159,10,.1); font-size: var(--font-min); line-height: 1.45; }
 .suggestions-notice { margin: 6px 5px 10px; padding: 9px 11px; border-radius: 8px; color: var(--green); background: color-mix(in srgb, var(--green) 10%, transparent); font-size: var(--font-min); line-height: 1.45; }
 .suggestion-list { display: grid; }
-.suggestion-item { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; padding: 11px 8px; }
+.suggestion-item { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; padding: 11px 8px; transition: opacity .2s ease, background .2s ease; }
 .suggestion-item + .suggestion-item { border-top: 1px solid var(--line); }
-.suggestion-item.not-applicable { opacity: .62; }
+.suggestion-item.not-applicable { opacity: .54; background: color-mix(in srgb, var(--muted-2) 3%, transparent); }
+.suggestion-item.not-applicable .suggestion-title-row strong del { color: var(--muted); text-decoration-color: color-mix(in srgb, var(--muted) 82%, transparent); text-decoration-thickness: 2px; }
+.suggestion-item.not-applicable .suggestion-category,
+.suggestion-item.not-applicable .suggestion-title-row b,
+.suggestion-item.not-applicable .suggestion-title-row em { filter: grayscale(.8); opacity: .62; }
+.suggestion-item.not-applicable .suggestion-check { border-style: dashed; opacity: .68; }
 .suggestion-check { width: 23px; height: 23px; display: grid; place-items: center; padding: 0; border: 1.5px solid var(--muted-2); border-radius: 50%; color: white; background: transparent; cursor: pointer; transition: border-color .18s ease, background .18s ease, box-shadow .18s ease; }
 .suggestion-check:hover:not(:disabled), .suggestion-check:focus-visible { border-color: var(--green); background: color-mix(in srgb, var(--green) 12%, transparent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--green) 9%, transparent); outline: 0; }
 .suggestion-item.completed .suggestion-check { border-color: var(--green); background: var(--green); }
