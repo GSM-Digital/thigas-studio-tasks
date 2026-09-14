@@ -45,6 +45,7 @@ import {
 } from "@/lib/domain/deadline";
 import { calculateAmountCents, calculateEfficiencyScore, formatCurrency } from "@/lib/domain/points";
 import { groupTasksByDeadline } from "@/lib/domain/task-groups";
+import { countOpenTasks } from "@/lib/domain/task-counts";
 import {
   findCompletedEssentialsMissingEvidence,
   MIN_REQUIRED_EVIDENCE_LENGTH,
@@ -325,12 +326,12 @@ export function TaskManager({
           <div className="sidebar-section-head"><p>CLIENTES</p>{viewer.role === "developer" && <button className="clients-manage-trigger" onClick={() => { setClientsOpen(true); setSettingsOpen(false); setJarvisOpen(false); }} aria-label="Gerenciar clientes"><Plus /></button>}</div>
           <button className={selectedClient === "all" ? "client-active" : ""} onClick={() => setSelectedClient("all")}>
             <span className="client-dot all"><BriefcaseBusiness /></span> Todos
-            <em>{tasks.length}</em>
+            <em>{countOpenTasks(tasks)}</em>
           </button>
           {clientList.map((client) => (
             <button key={client.id} className={selectedClient === client.id ? "client-active" : ""} onClick={() => setSelectedClient(client.id)}>
               <span className="client-dot" style={{ background: client.color }} /> {client.name}
-              <em>{tasks.filter((task) => task.clientId === client.id).length}</em>
+              <em>{countOpenTasks(tasks, client.id)}</em>
             </button>
           ))}
         </div>
