@@ -5,6 +5,8 @@ import {
   CalendarClock,
   Check,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   CircleDollarSign,
   Clock3,
   Copy,
@@ -43,9 +45,10 @@ import {
   toDateTimeLocalValue,
   weekendDayAtTimeZone,
 } from "@/lib/domain/deadline";
-import { calculateAmountCents, calculateEfficiencyScore, formatCurrency } from "@/lib/domain/points";
+import { calculateEfficiencyScore, formatCurrency } from "@/lib/domain/points";
 import { groupTasksByDeadline } from "@/lib/domain/task-groups";
 import { countOpenTasks } from "@/lib/domain/task-counts";
+import { billingPeriod, currentBillingMonth, shiftBillingMonth } from "@/lib/domain/billing-periods";
 import {
   findCompletedEssentialsMissingEvidence,
   MIN_REQUIRED_EVIDENCE_LENGTH,
@@ -164,14 +167,6 @@ function JarvisErrorDiagnostic({ diagnostic }: { diagnostic: AiErrorDiagnostic }
   );
 }
 
-function billingWindow(now = new Date()): { start: Date; end: Date } {
-  const thisMonth15 = new Date(now.getFullYear(), now.getMonth(), 15);
-  const end = now >= thisMonth15
-    ? new Date(now.getFullYear(), now.getMonth() + 1, 15)
-    : thisMonth15;
-  const start = new Date(end.getFullYear(), end.getMonth() - 1, 15);
-  return { start, end };
-}
 
 export function TaskManager({
   initialTasks,
@@ -380,7 +375,9 @@ export function TaskManager({
           />
         ) : (
           <AgencyView
-            tasks={filteredTasks}
+            tasks={tasks}
+            selectedClient={selectedClient}
+            search={search}
             settings={settings}
             demoMode={demoMode}
             onMutateTask={mutateTask}
@@ -1313,7 +1310,6 @@ function TaskRow({ task, clients, settings, demoMode, onMutate, onRemove }: { ta
           ) : null}
         </div>
       </div>
-      <div className="task-value"><span>{done ? formatCurrency(calculateAmountCents(task.points, settings.pointValueCents)) : "Estimado"}</span><strong>{task.points} × {formatCurrency(settings.pointValueCents)}</strong></div>
       <div className="timer-control">
         {editingTime ? (
           <form onSubmit={saveTime} className="time-editor"><input autoFocus value={timeInput} pattern="\d{1,4}:[0-5]\d:[0-5]\d" onChange={(event) => setTimeInput(event.target.value)} /><button className="inline-edit-action confirm" aria-label="Salvar tempo"><Check /></button><button className="inline-edit-action cancel" type="button" aria-label="Cancelar edição do tempo" onClick={() => setEditingTime(false)}><X /></button></form>
@@ -1426,13 +1422,53 @@ function TaskRow({ task, clients, settings, demoMode, onMutate, onRemove }: { ta
   );
 }
 
-function AgencyView({ tasks, settings, demoMode, onMutateTask }: { tasks: TaskView[]; settings: WorkspaceSettings; demoMode: boolean; onMutateTask: TaskMutator }) {
-  const completed = tasks.filter((task) => task.completedAt);
-  const period = billingWindow();
+function AgencyView({ tasks, selectedClient, search, settings, demoMode, onMutateTask }: { tasks: TaskView[]; selectedClient: string; search: string; settings: WorkspaceSettings; demoMode: boolean; onMutateTask: TaskMutator }) {
+  const timezone = settings.timezone ?? "America/Sao_Paulo";
+  const currentMonth = currentBillingMonth(new Date(), timezone);
+  const [month, setMonth] = useState(currentMonth);
+  const [history, setHistory] = useState<{ month: string; tasks: TaskView[] } | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
+  const period = billingPeriod(month, timezone);
+  const previousPeriod = billingPeriod(shiftBillingMonth(month, -1), timezone);
+  const rangeStart = previousPeriod.start.toISOString();
+  const rangeEnd = period.end.toISOString();
+  useEffect(() => {
+    if (demoMode) return;
+    const controller = new AbortController();
+    const params = new URLSearchParams({ periodStart: rangeStart, periodEnd: rangeEnd });
+    void requestJson<{ tasks: TaskView[] }>(`/api/reports/tasks?${params}`, { signal: controller.signal })
+      .then((result) => {
+        if (controller.signal.aborted) return;
+        setHistory({ month, tasks: result.tasks });
+        setHistoryError(null);
+      }).catch((error: unknown) => {
+        if (!controller.signal.aborted) setHistoryError(error instanceof Error ? error.message : "Não foi possível carregar o período.");
+      });
+    return () => controller.abort();
+  }, [demoMode, month, rangeStart, rangeEnd, retry]);
+  const ready = demoMode || history?.month === month;
+  const visibleTasks = (demoMode ? tasks : ready ? history!.tasks : []).filter((task) =>
+    (selectedClient === "all" || task.clientId === selectedClient)
+    && `${task.title} ${task.description ?? ""} ${task.clientName}`.toLocaleLowerCase("pt-BR").includes(search.toLocaleLowerCase("pt-BR")));
+  const completed = visibleTasks.filter((task) => task.completedAt && (task.status === "completed" || task.status === "approved"));
+  const sourceTasks = completed.map((task) => ({ id: task.id, title: task.title, clientId: task.clientId, clientName: task.clientName, completedAt: task.completedAt!, points: task.points, trackedSeconds: task.trackedSeconds, manualDurationSeconds: task.manualDurationSeconds }));
   const report = generateBillingReport({
-    tasks: completed.map((task) => ({ id: task.id, title: task.title, clientId: task.clientId, clientName: task.clientName, completedAt: task.completedAt!, points: task.points, trackedSeconds: task.trackedSeconds, manualDurationSeconds: task.manualDurationSeconds })),
+    tasks: sourceTasks,
     periodStart: period.start.toISOString(), periodEnd: period.end.toISOString(), pointValueCents: settings.pointValueCents,
   });
+  const previousReport = generateBillingReport({ tasks: sourceTasks, periodStart: rangeStart, periodEnd: period.start.toISOString(), pointValueCents: settings.pointValueCents });
+  const dateLabel = (date: Date) => date.toLocaleDateString("pt-BR", { timeZone: timezone });
+  function chooseMonth(value: string) {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(value) || value > currentMonth || value < "2000-01") return;
+    setHistoryError(null);
+    setMonth(value);
+  }
+  const mutateReportTask: TaskMutator = (id, action, fallback, options) => onMutateTask(id, async () => {
+    const updated = await action();
+    setHistory((current) => current ? { ...current, tasks: current.tasks.map((task) => task.id === id ? updated : task) } : current);
+    return updated;
+  }, fallback, options);
 
   function downloadCsv() {
     const blob = new Blob([reportToCsv(report)], { type: "text/csv;charset=utf-8" });
@@ -1445,27 +1481,39 @@ function AgencyView({ tasks, settings, demoMode, onMutateTask }: { tasks: TaskVi
   return (
     <div className="content-wrap agency-view">
       <div className="page-heading report-heading">
-        <div><p className="eyebrow">PAINEL DA AGÊNCIA</p><h1>Faturamento</h1><p>{period.start.toLocaleDateString("pt-BR")} — {period.end.toLocaleDateString("pt-BR")}</p></div>
-        <div className="report-actions"><button onClick={downloadCsv}><Download /> CSV</button><button className="primary" onClick={() => window.print()}><Download /> Salvar PDF</button></div>
+        <div><p className="eyebrow">PAINEL DA AGÊNCIA</p><h1>Faturamento</h1><p>{dateLabel(period.start)} — {dateLabel(period.end)}</p></div>
+        <div className="report-actions"><button disabled={!ready || Boolean(historyError)} onClick={downloadCsv}><Download /> CSV</button><button disabled={!ready || Boolean(historyError)} className="primary" onClick={() => window.print()}><Download /> Salvar PDF</button></div>
       </div>
+      <div className="billing-navigation">
+        <div className="billing-month-control">
+          <button type="button" disabled={month === "2000-01"} aria-label="Período anterior" onClick={() => chooseMonth(shiftBillingMonth(month, -1))}><ChevronLeft /></button>
+          <label>Mês de início do ciclo<input type="month" aria-label="Mês do faturamento" value={month} min="2000-01" max={currentMonth} onChange={(event) => chooseMonth(event.target.value)} /></label>
+          <button type="button" disabled={month >= currentMonth} aria-label="Próximo período" onClick={() => chooseMonth(shiftBillingMonth(month, 1))}><ChevronRight /></button>
+        </div>
+        <div><strong>{month === currentMonth ? "Período atual" : "Histórico de faturamento"}</strong><p>Ciclos do dia 15 ao dia 15. Os valores são calculados pelas entregas, não indicam pagamento recebido.</p></div>
+        {month !== currentMonth && <button type="button" className="billing-current" onClick={() => chooseMonth(currentMonth)}>Voltar ao atual</button>}
+      </div>
+      {historyError ? <div className="billing-load-message" role="alert">{historyError}<button type="button" onClick={() => { setHistoryError(null); setHistory(null); setRetry((value) => value + 1); }}>Tentar novamente</button></div> : !ready ? <p className="billing-load-message" role="status"><LoaderCircle className="spin" /> Carregando entregas do período...</p> : <>
       <div className="metric-grid">
         <Metric icon={<CircleDollarSign />} label="Valor do ciclo" value={formatCurrency(report.totalAmountCents)} />
         <Metric icon={<Sparkles />} label="Pontos entregues" value={`${report.totalPoints} pts`} />
         <Metric icon={<Clock3 />} label="Tempo registrado" value={formatDuration(report.totalDurationSeconds)} />
       </div>
+      <div className="billing-comparison"><span>Período anterior · {dateLabel(previousPeriod.start)} — {dateLabel(previousPeriod.end)}</span><strong>{formatCurrency(previousReport.totalAmountCents)}</strong><span>Diferença: {report.totalAmountCents - previousReport.totalAmountCents > 0 ? "+" : ""}{formatCurrency(report.totalAmountCents - previousReport.totalAmountCents)}</span></div>
       <section className="report-card">
         <div className="report-card-title"><div><p className="eyebrow">DETALHAMENTO</p><h2>Entregas por cliente</h2></div><span>{report.clients.length} clientes</span></div>
         {report.clients.map((client) => (
           <div className="client-report" key={client.clientId}>
             <div className="client-report-head"><strong>{client.clientName}</strong><span>{client.totalPoints} pts · {formatCurrency(client.totalAmountCents)}</span></div>
             {client.tasks.map((item) => {
-              const source = tasks.find((task) => task.id === item.id)!;
-              return <AgencyTaskReportRow key={item.id} item={item} source={source} settings={settings} demoMode={demoMode} onMutateTask={onMutateTask} />;
+              const source = visibleTasks.find((task) => task.id === item.id)!;
+              return <AgencyTaskReportRow key={item.id} item={item} source={source} settings={settings} demoMode={demoMode} onMutateTask={mutateReportTask} />;
             })}
           </div>
         ))}
         {report.clients.length === 0 && <EmptyState label="Nenhuma tarefa concluída neste ciclo." />}
       </section>
+      </>}
     </div>
   );
 }

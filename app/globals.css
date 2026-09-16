@@ -161,7 +161,7 @@ button { color: inherit; }
 .task-date-group.today .task-date-heading h2 { color: var(--blue); }
 .task-date-group.overdue .task-date-heading h2 { color: #ff453a; }
 .task-list { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; box-shadow: 0 8px 34px rgba(25, 35, 50, .035); }
-.task-row { min-height: 86px; display: grid; grid-template-columns: 28px minmax(220px, 1fr) 105px 215px; align-items: center; gap: 13px; padding: 15px 17px; }
+.task-row { min-height: 86px; display: grid; grid-template-columns: 28px minmax(220px, 1fr) 215px; align-items: center; gap: 13px; padding: 15px 17px; }
 .task-row + .task-row { border-top: 1px solid var(--line); }
 .check-button { width: 24px; height: 24px; display: grid; place-items: center; border: 1.5px solid #b9bac0; border-radius: 50%; color: var(--muted); background: transparent; cursor: pointer; transition: color .18s ease, border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease; }
 .check-button:hover:not(:disabled), .check-button:focus-visible { color: var(--green); border-color: var(--green); background: color-mix(in srgb, var(--green) 11%, transparent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--green) 10%, transparent); transform: scale(1.06); outline: 0; }
@@ -270,9 +270,6 @@ button { color: inherit; }
 .due-editor > svg { width: 12px; height: 12px; color: var(--blue); }
 .due-editor input { width: 190px; height: 34px; min-width: 0; padding: 4px 8px; border: 1px solid var(--blue); border-radius: 7px; outline: 0; background: var(--surface-2); color: var(--text); font-size: max(var(--font-min), 9px); color-scheme: light; }
 :root[data-theme="dark"] .due-editor input { color-scheme: dark; }
-.task-value { display: flex; flex-direction: column; text-align: right; }
-.task-value span { font-size: max(var(--font-min), 11px); font-weight: 650; }
-.task-value strong { margin-top: 3px; color: var(--muted); font-size: max(var(--font-min), 8px); font-weight: 500; }
 .timer-control { justify-self: end; display: flex; align-items: center; gap: 8px; }
 .time-display { min-width: 102px; display: flex; justify-content: center; align-items: center; gap: 6px; padding: 8px 9px; border: 0; border-radius: 9px; background: var(--surface-2); color: var(--muted); font-variant-numeric: tabular-nums; font-size: max(var(--font-min), 10px); cursor: pointer; }
 .time-display:disabled { cursor: default; color: var(--blue); }
@@ -304,6 +301,30 @@ button { color: inherit; }
 .empty-state p { margin: 0; font-size: max(var(--font-min), 11px); }
 
 .report-heading { align-items: center; }
+.billing-navigation { display: flex; align-items: center; flex-wrap: wrap; gap: 18px; margin: 0 0 22px; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.billing-month-control { display: flex; align-items: center; gap: 10px; }
+.billing-month-control label { display: grid; gap: 6px; color: var(--muted); font-size: var(--font-min); }
+.billing-month-control input { min-width: 185px; min-height: 42px; padding: 8px 10px; color: var(--text); background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; font: inherit; }
+.billing-month-control button, .billing-current, .billing-load-message button { min-height: 44px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); color: var(--text); font-size: var(--font-min); cursor: pointer; transition: background .2s, color .2s; }
+.billing-month-control button { width: 44px; display: grid; place-items: center; }
+.billing-month-control svg { width: 20px; height: 20px; }
+.billing-navigation > div:nth-child(2) { flex: 1; min-width: 220px; }
+.billing-navigation strong { font-size: 16px; }
+.billing-navigation p { margin: 6px 0 0; color: var(--muted); font-size: var(--font-min); line-height: 1.5; }
+.billing-month-control button:hover:not(:disabled), .billing-current:hover, .billing-load-message button:hover { color: var(--blue); background: var(--blue-soft); }
+.billing-navigation button:disabled, .report-actions button:disabled { opacity: .45; cursor: not-allowed; }
+.billing-comparison { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: -8px 0 22px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); font-size: var(--font-min); }
+.billing-comparison span { color: var(--muted); }
+.billing-comparison strong { color: var(--text); }
+.billing-load-message { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 20px; font-size: var(--font-min); color: var(--muted); }
+.billing-load-message svg { width: 20px; }
+@media (max-width: 600px) {
+  .billing-navigation { padding: 12px; gap: 14px; }
+  .billing-month-control { width: 100%; }
+  .billing-month-control label { flex: 1; min-width: 0; }
+  .billing-month-control input { width: 100%; min-width: 0; }
+}
+@media print { .billing-navigation, .billing-load-message { display: none !important; } }
 .report-actions { display: flex; gap: 8px; }
 .report-actions button { height: 36px; display: flex; align-items: center; gap: 6px; padding: 0 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); font-size: max(var(--font-min), 10px); cursor: pointer; }
 .report-actions button.primary { color: white; border-color: var(--blue); background: var(--blue); }
